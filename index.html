@@ -506,6 +506,12 @@
         return 0;
       };
 
+      // Marca de tiempo exacta de cierre de una misión (completedAt prioritario)
+      const getMissionClosedTimestamp = (m) => {
+        if (m.completedAt && Number(m.completedAt) > 0) return Number(m.completedAt);
+        return getMissionTimestamp(m);
+      };
+
       const activeWorkerQueue = useMemo(() => {
         if (!isolatedWorkerId) return [];
         return missions
@@ -524,7 +530,7 @@
         if (!isolatedWorkerId) return [];
         return missions
           .filter(m => m.workerId === isolatedWorkerId && m.status === 'Completada')
-          .sort((a, b) => (b.completedAt || getMissionTimestamp(b)) - (a.completedAt || getMissionTimestamp(a)));
+          .sort((a, b) => getMissionClosedTimestamp(b) - getMissionClosedTimestamp(a));
       }, [missions, isolatedWorkerId]);
 
       const availableMonths = useMemo(() => {
@@ -563,7 +569,14 @@
             if (searchQuery.trim() && !m.clientName.toLowerCase().includes(searchQuery.toLowerCase()) && !m.missionTitle.toLowerCase().includes(searchQuery.toLowerCase()) && !(m.accountUser || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
             return true;
           })
-          .sort((a, b) => getMissionTimestamp(b) - getMissionTimestamp(a));
+          .sort((a, b) => {
+            // En Registro Completadas, ordenar sí o sí por la última que hayan cerrado los mercs (completedAt descendente)
+            if (statusFilter === 'Completada' || (a.status === 'Completada' && b.status === 'Completada')) {
+              const closeDiff = getMissionClosedTimestamp(b) - getMissionClosedTimestamp(a);
+              if (closeDiff !== 0) return closeDiff;
+            }
+            return getMissionTimestamp(b) - getMissionTimestamp(a);
+          });
       }, [missions, monthFilter, statusFilter, tagFilter, workerFilter, paymentFilter, searchQuery]);
 
       const creatorFinancialsByMonth = useMemo(() => {
@@ -2060,6 +2073,7 @@
                           const isInProgress = m.status === 'En Progreso';
                           const isCompleted = m.status === 'Completada';
                           const addedDateText = formatAddedDate(m.createdAt);
+                          const closedDateText = isCompleted ? formatAddedDate(m.completedAt || m.createdAt) : '';
                           const isPassVisible = visibleCredentials[m.id] !== undefined ? visibleCredentials[m.id] : showAllCreatorPasswords;
 
                           const assignedWorker = workers.find(w => w.id === m.workerId);
@@ -2080,7 +2094,11 @@
                                       🥷 {assignedWorker.name}
                                     </span>
                                   )}
-                                  {addedDateText && <span className="text-[11px] text-slate-500 font-medium">• {addedDateText}</span>}
+                                  {isCompleted && closedDateText ? (
+                                    <span className="text-[11px] text-emerald-400 font-bold">• ✓ Cerrada: {closedDateText}</span>
+                                  ) : (
+                                    addedDateText && <span className="text-[11px] text-slate-500 font-medium">• {addedDateText}</span>
+                                  )}
                                 </div>
                                 <h3 className="font-extrabold text-white text-base">{m.missionTitle}</h3>
                                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
