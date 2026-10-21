@@ -1,0 +1,2383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Misiones Gaming</title>
+
+  <!-- CONFIGURACIÓN PWA -->
+  <meta name="theme-color" content="#020617" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Misiones" />
+
+  <!-- Icono Gaming -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='120' fill='%230f172a'/%3E%3Crect x='24' y='24' width='464' height='464' rx='100' fill='none' stroke='%236366f1' stroke-width='20'/%3E%3Cpath d='M145 367L367 145M367 145H280M367 145V232' stroke='%2310b981' stroke-width='36' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M367 367L145 145M145 145H232M145 145V232' stroke='%236366f1' stroke-width='36' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='120' fill='%230f172a'/%3E%3Crect x='24' y='24' width='464' height='464' rx='100' fill='none' stroke='%236366f1' stroke-width='20'/%3E%3Cpath d='M145 367L367 145M367 145H280M367 145V232' stroke='%2310b981' stroke-width='36' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M367 367L145 145M145 145H232M145 145V232' stroke='%236366f1' stroke-width='36' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.363.0?deps=react@18.2.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"
+      }
+    }
+  </script>
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    body { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useMemo, useRef } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { 
+      Shield, Sword, CheckCircle2, Clock, Plus, Copy, Eye, EyeOff, Play, Check, 
+      Trash2, Edit3, Search, Smartphone, DollarSign, Euro, LogOut, Lock, Crown, 
+      Calendar, CreditCard, History, Users, Tag, BarChart3, TrendingUp, ArrowUp, Key, Sparkles,
+      Bell, BellRing, Volume2, VolumeX, CheckCheck
+    } from 'lucide-react';
+
+    import { initializeApp } from "firebase/app";
+    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-MMvUt9IvYSHwcFbC0M3K9PdXtlf2gZU",
+      authDomain: "gestionmercenarios.firebaseapp.com",
+      projectId: "gestionmercenarios",
+      storageBucket: "gestionmercenarios.firebasestorage.app",
+      messagingSenderId: "534795985470",
+      appId: "1:534795985470:web:ba5715acfbb4114806676f"
+    };
+
+    let db = null;
+    let auth = null;
+    try {
+      const app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      auth = getAuth(app);
+    } catch (e) {
+      console.warn("Error al iniciar Firebase:", e);
+    }
+
+    const ADMIN_EMAIL = 'victorsoripar@gmail.com';
+
+    // Sintetizador de sonido para notificaciones en tiempo real (sin archivos externos)
+    const playNotificationSound = (type = 'default') => {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'completed') {
+          // Doble tono ascendente alegre para misiones completadas
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, now); // D5
+          osc.frequency.setValueAtTime(880, now + 0.12); // A5
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+          osc.start(now);
+          osc.stop(now + 0.42);
+        } else if (type === 'removed') {
+          // Tono descendente suave para misión retirada
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.setValueAtTime(311.13, now + 0.14);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else {
+          // Tono cristalino para nueva asignación o misión puesta en curso
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+          gain.gain.setValueAtTime(0.16, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        }
+      } catch (e) {
+        // Ignorar si el navegador bloquea el audio antes de interactuar
+      }
+    };
+
+    const isExcludedInternalClient = (name) => {
+      if (!name) return true;
+      const clean = name.trim().toLowerCase();
+      return clean === 'acumulado whatsapp' || clean.includes('acumulado whatsapp');
+    };
+
+    const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const getCurrentMonthYear = (dateObj = new Date()) => `${MONTH_NAMES[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+    const parseMonthYearSortValue = (str) => {
+      if (!str) return 0;
+      const parts = str.trim().split(' ');
+      if (parts.length < 2) return 0;
+      const mIndex = MONTH_NAMES.findIndex(m => m.toLowerCase() === parts[0].toLowerCase());
+      const year = parseInt(parts[1], 10) || 0;
+      return year * 100 + (mIndex >= 0 ? mIndex : 0);
+    };
+    const formatAddedDate = (ts) => {
+      if (!ts) return '';
+      try { return new Date(Number(ts)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+    };
+
+    const getMissionPaymentMethod = (m) => {
+      return m?.paymentMethod === 'PayPal' ? 'PayPal' : 'Bizum';
+    };
+
+    const TAG_COLOR_OPTIONS = [
+      { id: 'indigo', label: 'Índigo', badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40', barClass: 'bg-indigo-500' },
+      { id: 'emerald', label: 'Esmeralda', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', barClass: 'bg-emerald-500' },
+      { id: 'amber', label: 'Dorado / Ámbar', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40', barClass: 'bg-amber-500' },
+      { id: 'rose', label: 'Rojo / Rosa', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40', barClass: 'bg-rose-500' },
+      { id: 'purple', label: 'Morado', badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40', barClass: 'bg-purple-500' },
+      { id: 'cyan', label: 'Cian', badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40', barClass: 'bg-cyan-500' }
+    ];
+    const getTagColorMeta = (colorId) => TAG_COLOR_OPTIONS.find(c => c.id === colorId) || TAG_COLOR_OPTIONS[0];
+
+    const WORKER_COLOR_OPTIONS = [
+      { id: 'from-indigo-500 to-purple-600', label: 'Morado / Índigo', gradient: 'from-indigo-500 to-purple-600', dotClass: 'bg-indigo-500', badgeClass: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/40', selectClass: 'bg-indigo-950/60 border-indigo-500/50 text-indigo-200' },
+      { id: 'from-rose-500 to-red-600', label: 'Rojo Carmesí', gradient: 'from-rose-500 to-red-600', dotClass: 'bg-rose-500', badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/40', selectClass: 'bg-rose-950/60 border-rose-500/50 text-rose-200' },
+      { id: 'from-emerald-500 to-teal-600', label: 'Verde Esmeralda', gradient: 'from-emerald-500 to-teal-600', dotClass: 'bg-emerald-500', badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40', selectClass: 'bg-emerald-950/60 border-emerald-500/50 text-emerald-200' },
+      { id: 'from-amber-500 to-orange-600', label: 'Dorado / Ámbar', gradient: 'from-amber-500 to-orange-600', dotClass: 'bg-amber-400', badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/40', selectClass: 'bg-amber-950/60 border-amber-500/50 text-amber-200' },
+      { id: 'from-cyan-500 to-blue-600', label: 'Azul Cian', gradient: 'from-cyan-500 to-blue-600', dotClass: 'bg-cyan-400', badgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40', selectClass: 'bg-cyan-950/60 border-cyan-500/50 text-cyan-200' },
+      { id: 'from-fuchsia-500 to-pink-600', label: 'Rosa Neón / Fucsia', gradient: 'from-fuchsia-500 to-pink-600', dotClass: 'bg-fuchsia-500', badgeClass: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/40', selectClass: 'bg-fuchsia-950/60 border-fuchsia-500/50 text-fuchsia-200' },
+      { id: 'from-blue-600 to-indigo-700', label: 'Azul Real', gradient: 'from-blue-600 to-indigo-700', dotClass: 'bg-blue-500', badgeClass: 'bg-blue-500/15 text-blue-300 border-blue-500/40', selectClass: 'bg-blue-950/60 border-blue-500/50 text-blue-200' },
+      { id: 'from-orange-500 to-red-600', label: 'Naranja Fuego', gradient: 'from-orange-500 to-red-600', dotClass: 'bg-orange-500', badgeClass: 'bg-orange-500/15 text-orange-300 border-orange-500/40', selectClass: 'bg-orange-950/60 border-orange-500/50 text-orange-200' }
+    ];
+
+    const getWorkerColorMeta = (colorStr) => {
+      if (!colorStr) return WORKER_COLOR_OPTIONS[0];
+      const exact = WORKER_COLOR_OPTIONS.find(c => c.id === colorStr);
+      if (exact) return exact;
+      if (colorStr.includes('rose')) return WORKER_COLOR_OPTIONS[1];
+      if (colorStr.includes('emerald')) return WORKER_COLOR_OPTIONS[2];
+      if (colorStr.includes('amber')) return WORKER_COLOR_OPTIONS[3];
+      if (colorStr.includes('cyan')) return WORKER_COLOR_OPTIONS[4];
+      if (colorStr.includes('fuchsia') || colorStr.includes('pink')) return WORKER_COLOR_OPTIONS[5];
+      if (colorStr.includes('blue')) return WORKER_COLOR_OPTIONS[6];
+      if (colorStr.includes('orange')) return WORKER_COLOR_OPTIONS[7];
+      return WORKER_COLOR_OPTIONS[0];
+    };
+
+    function App() {
+      const systemCurrentMonth = useMemo(() => getCurrentMonthYear(), []);
+
+      const [workers, setWorkers] = useState([]);
+      const [missions, setMissions] = useState([]);
+      const [tags, setTags] = useState([]);
+      const [notifications, setNotifications] = useState([]);
+      
+      const [authUser, setAuthUser] = useState(null); 
+      const [isAuthChecking, setIsAuthChecking] = useState(true);
+      const [emailInput, setEmailInput] = useState('');
+      const [passwordInput, setPasswordInput] = useState('');
+      const [loginError, setLoginError] = useState('');
+      const [showPwaHint, setShowPwaHint] = useState(false);
+
+      // Estados del centro de notificaciones
+      const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
+      const [soundEnabled, setSoundEnabled] = useState(true);
+      const [browserNotifPermission, setBrowserNotifPermission] = useState(
+        typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+      );
+      const [liveBannerAlert, setLiveBannerAlert] = useState(null);
+      const knownNotifIdsRef = useRef(new Set());
+      const initialNotifLoadDoneRef = useRef(false);
+
+      const [workerTab, setWorkerTab] = useState('queue');
+      const [creatorTab, setCreatorTab] = useState('missions');
+      const [statusFilter, setStatusFilter] = useState('ACTIVE');
+      const [tagFilter, setTagFilter] = useState('ALL');
+      const [workerFilter, setWorkerFilter] = useState('ALL');
+      const [paymentFilter, setPaymentFilter] = useState('ALL');
+      const [monthFilter, setMonthFilter] = useState(systemCurrentMonth);
+      const [tagStatsPeriod, setTagStatsPeriod] = useState('ALL');
+      const [searchQuery, setSearchQuery] = useState('');
+
+      const [isMissionModalOpen, setIsMissionModalOpen] = useState(false);
+      const [editingMission, setEditingMission] = useState(null);
+      const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
+      const [editingWorker, setEditingWorker] = useState(null);
+      const [completingMission, setCompletingMission] = useState(null);
+      const [completionNoteInput, setCompletionNoteInput] = useState('');
+      const [missionToDelete, setMissionToDelete] = useState(null);
+      const [workerToDelete, setWorkerToDelete] = useState(null);
+      const [tagToDelete, setTagToDelete] = useState(null);
+
+      const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+
+      const [tagForm, setTagForm] = useState({ name: '', color: 'indigo' });
+      const [editingTag, setEditingTag] = useState(null);
+      const [quickTagName, setQuickTagName] = useState('');
+      const [quickTagColor, setQuickTagColor] = useState('indigo');
+
+      const [toastMessage, setToastMessage] = useState(null);
+      const [visibleCredentials, setVisibleCredentials] = useState({});
+      const [showAllCreatorPasswords, setShowAllCreatorPasswords] = useState(true);
+
+      const [missionForm, setMissionForm] = useState({
+        clientName: '', clientContact: '', missionTitle: '', gameCategory: 'Exploración de Actos',
+        accountUser: '', accountPass: '', loginMethod: 'Kabam ID', instructions: '',
+        priority: 'Normal', workerId: 'unassigned', priceTotalEUR: '', workerPayUSD: '',
+        paymentMethod: 'Bizum', tags: []
+      });
+
+      const [workerForm, setWorkerForm] = useState({
+        name: '', email: '', specialty: '', color: WORKER_COLOR_OPTIONS[0].id
+      });
+
+      useEffect(() => {
+        if (!auth) return;
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          setAuthUser(user);
+          setIsAuthChecking(false);
+          knownNotifIdsRef.current = new Set();
+          initialNotifLoadDoneRef.current = false;
+        });
+        return () => unsubscribe();
+      }, []);
+
+      useEffect(() => {
+        if (!db || !authUser) return;
+
+        const unsubMissions = onSnapshot(collection(db, "missions"), (snapshot) => {
+          const cloudMissions = [];
+          snapshot.forEach((docSnap) => cloudMissions.push({ id: docSnap.id, ...docSnap.data() }));
+          setMissions(cloudMissions);
+        });
+
+        const unsubWorkers = onSnapshot(collection(db, "workers"), (snapshot) => {
+          const cloudWorkers = [];
+          snapshot.forEach((docSnap) => cloudWorkers.push({ id: docSnap.id, ...docSnap.data() }));
+          setWorkers(cloudWorkers);
+        });
+
+        const unsubTags = onSnapshot(collection(db, "tags"), (snapshot) => {
+          const cloudTags = [];
+          snapshot.forEach((docSnap) => cloudTags.push({ id: docSnap.id, ...docSnap.data() }));
+          setTags(cloudTags);
+        });
+
+        const unsubNotifications = onSnapshot(collection(db, "notifications"), (snapshot) => {
+          const cloudNotifs = [];
+          snapshot.forEach((docSnap) => cloudNotifs.push({ id: docSnap.id, ...docSnap.data() }));
+          setNotifications(cloudNotifs);
+        });
+
+        return () => {
+          unsubMissions();
+          unsubWorkers();
+          unsubTags();
+          unsubNotifications();
+        };
+      }, [authUser]);
+
+      const showToast = (msg) => {
+        setToastMessage({ text: msg });
+        setTimeout(() => setToastMessage(null), 3500);
+      };
+
+      const isCreatorSession = authUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      const currentIsolatedWorker = workers.find(w => w.email?.toLowerCase() === authUser?.email?.toLowerCase()) || null;
+      const isolatedWorkerId = currentIsolatedWorker ? currentIsolatedWorker.id : null;
+
+      // Identificador del destinatario actual para filtrar sus notificaciones
+      const currentRecipientKey = isCreatorSession ? 'creator' : (isolatedWorkerId || null);
+
+      // Notificaciones dirigidas al usuario actual (ordenadas de más reciente a más antigua)
+      const myNotifications = useMemo(() => {
+        if (!currentRecipientKey) return [];
+        return notifications
+          .filter(n => n.recipient === currentRecipientKey)
+          .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+      }, [notifications, currentRecipientKey]);
+
+      const unreadNotifCount = useMemo(() => {
+        return myNotifications.filter(n => !n.read).length;
+      }, [myNotifications]);
+
+      // Detectar nuevas notificaciones en tiempo real para disparar alerta sonora y banner superior
+      useEffect(() => {
+        if (!currentRecipientKey) return;
+        if (!initialNotifLoadDoneRef.current) {
+          if (notifications.length >= 0) {
+            myNotifications.forEach(n => knownNotifIdsRef.current.add(n.id));
+            initialNotifLoadDoneRef.current = true;
+          }
+          return;
+        }
+
+        const newlyArrived = myNotifications.filter(n => !knownNotifIdsRef.current.has(n.id));
+        if (newlyArrived.length > 0) {
+          newlyArrived.forEach(n => knownNotifIdsRef.current.add(n.id));
+          const latest = newlyArrived[0];
+
+          // Solo sonar y mostrar alerta si fue creada hace menos de 30 segundos
+          if (Date.now() - (Number(latest.createdAt) || 0) < 30000) {
+            if (soundEnabled) {
+              playNotificationSound(latest.eventType || 'default');
+            }
+            setLiveBannerAlert(latest);
+            setTimeout(() => {
+              setLiveBannerAlert(prev => (prev?.id === latest.id ? null : prev));
+            }, 6000);
+
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              try {
+                new Notification(latest.title || 'Misiones Gaming', {
+                  body: latest.message || '',
+                  silent: false
+                });
+              } catch (e) {}
+            }
+          }
+        }
+      }, [myNotifications, currentRecipientKey, soundEnabled, notifications.length]);
+
+      // Función auxiliar para enviar una notificación a Firebase
+      const pushCloudNotification = async ({ recipient, title, message, eventType = 'info', missionTitle = '', clientName = '' }) => {
+        if (!db || !recipient) return;
+        const now = Date.now();
+        const notifId = `notif-${now}-${Math.random().toString(36).slice(2, 7)}`;
+        const newNotif = {
+          id: notifId,
+          recipient, // 'creator' o el worker.id (ej. 'worker-12345')
+          title,
+          message,
+          eventType, // 'assigned' | 'removed' | 'started' | 'completed' | 'status_changed' | 'paid'
+          missionTitle,
+          clientName,
+          read: false,
+          createdAt: now
+        };
+        try {
+          await setDoc(doc(db, "notifications", notifId), newNotif);
+        } catch (err) {
+          console.error("Error enviando notificación:", err);
+        }
+      };
+
+      const handleMarkNotifAsRead = async (notif) => {
+        if (!db || notif.read) return;
+        try {
+          await setDoc(doc(db, "notifications", notif.id), { read: true }, { merge: true });
+        } catch (e) { console.error(e); }
+      };
+
+      const handleMarkAllNotifsAsRead = async () => {
+        if (!db) return;
+        const unread = myNotifications.filter(n => !n.read);
+        for (const n of unread) {
+          try {
+            await setDoc(doc(db, "notifications", n.id), { read: true }, { merge: true });
+          } catch (e) {}
+        }
+        showToast('✓ Todas las notificaciones marcadas como leídas');
+      };
+
+      const handleClearAllMyNotifications = async () => {
+        if (!db) return;
+        for (const n of myNotifications) {
+          try {
+            await deleteDoc(doc(db, "notifications", n.id));
+          } catch (e) {}
+        }
+        showToast('🗑️ Historial de notificaciones vaciado');
+      };
+
+      const requestBrowserNotificationPermission = async () => {
+        if (typeof Notification === 'undefined') {
+          showToast('⚠️ Tu navegador no soporta notificaciones nativas');
+          return;
+        }
+        try {
+          const perm = await Notification.requestPermission();
+          setBrowserNotifPermission(perm);
+          if (perm === 'granted') {
+            showToast('📲 Avisos nativos del navegador activados');
+          } else {
+            showToast('⚠️ Permiso denegado en el navegador');
+          }
+        } catch (e) {}
+      };
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setLoginError('');
+        try {
+          await signInWithEmailAndPassword(auth, emailInput.trim(), passwordInput);
+          setEmailInput('');
+          setPasswordInput('');
+          showToast('🔒 Conexión segura establecida');
+        } catch (err) {
+          console.error(err);
+          setLoginError('Correo o contraseña incorrectos.');
+        }
+      };
+
+      const handleLogout = async () => {
+        try {
+          await signOut(auth);
+          setIsNotifPanelOpen(false);
+          showToast('Sesión cerrada');
+        } catch (err) { console.error(err); }
+      };
+
+      const getMissionTagIds = (mission) => Array.isArray(mission.tags) ? mission.tags : (mission.tagId ? [mission.tagId] : []);
+      const getMissionTimestamp = (m) => {
+        if (m.createdAt) return Number(m.createdAt);
+        if (m.id && m.id.startsWith('mission-')) {
+          const parsed = parseInt(m.id.replace('mission-', ''), 10);
+          if (!isNaN(parsed)) return parsed;
+        }
+        return 0;
+      };
+
+      const activeWorkerQueue = useMemo(() => {
+        if (!isolatedWorkerId) return [];
+        return missions
+          .filter(m => m.workerId === isolatedWorkerId && (m.status === 'En Progreso' || m.status === 'Pendiente'))
+          .sort((a, b) => {
+            if (a.status === 'En Progreso' && b.status !== 'En Progreso') return -1;
+            if (b.status === 'En Progreso' && a.status !== 'En Progreso') return 1;
+            const prioA = a.workerPriorityOrder !== undefined ? Number(a.workerPriorityOrder) : 0;
+            const prioB = b.workerPriorityOrder !== undefined ? Number(b.workerPriorityOrder) : 0;
+            if (prioA !== prioB) return prioA - prioB;
+            return getMissionTimestamp(b) - getMissionTimestamp(a);
+          });
+      }, [missions, isolatedWorkerId]);
+
+      const completedWorkerMissions = useMemo(() => {
+        if (!isolatedWorkerId) return [];
+        return missions
+          .filter(m => m.workerId === isolatedWorkerId && m.status === 'Completada')
+          .sort((a, b) => (b.completedAt || getMissionTimestamp(b)) - (a.completedAt || getMissionTimestamp(a)));
+      }, [missions, isolatedWorkerId]);
+
+      const availableMonths = useMemo(() => {
+        const monthSet = new Set([systemCurrentMonth]);
+        missions.forEach(m => { if (m.monthYear) monthSet.add(m.monthYear); });
+        return Array.from(monthSet).sort((a, b) => parseMonthYearSortValue(b) - parseMonthYearSortValue(a));
+      }, [missions, systemCurrentMonth]);
+
+      const creatorMissionCounts = useMemo(() => {
+        const base = missions.filter(m => {
+          if (m.monthYear !== monthFilter) return false;
+          if (tagFilter !== 'ALL' && !getMissionTagIds(m).includes(tagFilter)) return false;
+          if (workerFilter !== 'ALL' && m.workerId !== workerFilter) return false;
+          if (paymentFilter !== 'ALL' && getMissionPaymentMethod(m) !== paymentFilter) return false;
+          if (searchQuery.trim() && !m.clientName.toLowerCase().includes(searchQuery.toLowerCase()) && !m.missionTitle.toLowerCase().includes(searchQuery.toLowerCase()) && !(m.accountUser || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+          return true;
+        });
+
+        const inProgress = base.filter(m => m.status === 'En Progreso').length;
+        const pending = base.filter(m => m.status === 'Pendiente').length;
+        const completed = base.filter(m => m.status === 'Completada').length;
+
+        return { active: inProgress + pending, inProgress, pending, completed, all: base.length };
+      }, [missions, monthFilter, tagFilter, workerFilter, paymentFilter, searchQuery]);
+
+      const creatorFilteredMissions = useMemo(() => {
+        return missions
+          .filter(m => {
+            if (m.monthYear !== monthFilter) return false;
+            if (statusFilter === 'ACTIVE') {
+              if (m.status !== 'Pendiente' && m.status !== 'En Progreso') return false;
+            } else if (statusFilter !== 'ALL' && m.status !== statusFilter) return false;
+            if (tagFilter !== 'ALL' && !getMissionTagIds(m).includes(tagFilter)) return false;
+            if (workerFilter !== 'ALL' && m.workerId !== workerFilter) return false;
+            if (paymentFilter !== 'ALL' && getMissionPaymentMethod(m) !== paymentFilter) return false;
+            if (searchQuery.trim() && !m.clientName.toLowerCase().includes(searchQuery.toLowerCase()) && !m.missionTitle.toLowerCase().includes(searchQuery.toLowerCase()) && !(m.accountUser || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            return true;
+          })
+          .sort((a, b) => getMissionTimestamp(b) - getMissionTimestamp(a));
+      }, [missions, monthFilter, statusFilter, tagFilter, workerFilter, paymentFilter, searchQuery]);
+
+      const creatorFinancialsByMonth = useMemo(() => {
+        const summary = {};
+        availableMonths.forEach(month => {
+          const monthMissions = missions.filter(m => m.monthYear === month);
+
+          const calcModalityStats = (list) => {
+            const revenueEUR = list.reduce((acc, m) => acc + (Number(m.priceTotalEUR) || 0), 0);
+            const workerCostUSD = list
+              .filter(m => m.status === 'Completada' && m.workerId !== 'unassigned')
+              .reduce((acc, m) => acc + (Number(m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD) || 0), 0);
+            const workerCostEUR = workerCostUSD * 0.92;
+            const netProfitEUR = revenueEUR - workerCostEUR;
+            return {
+              revenueEUR,
+              workerCostUSD,
+              netProfitEUR,
+              count: list.length
+            };
+          };
+
+          const totalStats = calcModalityStats(monthMissions);
+          const bizumMissions = monthMissions.filter(m => getMissionPaymentMethod(m) === 'Bizum');
+          const paypalMissions = monthMissions.filter(m => getMissionPaymentMethod(m) === 'PayPal');
+
+          summary[month] = {
+            totalEUR: totalStats.revenueEUR,
+            totalUSDWorkerCost: totalStats.workerCostUSD,
+            netProfitEUR: totalStats.netProfitEUR,
+            missionCount: monthMissions.length,
+            bizum: calcModalityStats(bizumMissions),
+            paypal: calcModalityStats(paypalMissions)
+          };
+        });
+        return summary;
+      }, [missions, availableMonths]);
+
+      const tagAnalytics = useMemo(() => {
+        const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
+        const totalMissionsInPeriod = filteredMissions.length;
+
+        const statsList = tags.map(t => {
+          const matchingMissions = filteredMissions.filter(m => getMissionTagIds(m).includes(t.id));
+          const count = matchingMissions.length;
+          const revenueEUR = matchingMissions.reduce((acc, m) => acc + (Number(m.priceTotalEUR) || 0), 0);
+          const workerCostUSD = matchingMissions.reduce((acc, m) => acc + (Number(m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD) || 0), 0);
+          
+          const workerCostEUR = workerCostUSD * 0.92;
+          const netProfitEUR = revenueEUR - workerCostEUR;
+          const percentage = totalMissionsInPeriod > 0 ? Math.round((count / totalMissionsInPeriod) * 100) : 0;
+
+          return { ...t, count, revenueEUR, workerCostUSD, workerCostEUR, netProfitEUR, percentage };
+        }).sort((a, b) => b.count !== a.count ? b.count - a.count : b.revenueEUR - a.revenueEUR);
+
+        const maxCount = statsList.length > 0 ? Math.max(...statsList.map(s => s.count), 1) : 1;
+        return { statsList, totalMissionsInPeriod, maxCount };
+      }, [tags, missions, tagStatsPeriod]);
+
+      const knownClientsDatabase = useMemo(() => {
+        const sorted = [...missions].sort((a, b) => getMissionTimestamp(b) - getMissionTimestamp(a));
+        const clientMap = new Map();
+
+        sorted.forEach(m => {
+          const rawName = (m.clientName || '').trim();
+          if (!rawName || isExcludedInternalClient(rawName)) return;
+          const key = rawName.toLowerCase();
+
+          if (!clientMap.has(key)) {
+            clientMap.set(key, {
+              clientName: rawName,
+              clientContact: m.clientContact || '',
+              accountUser: m.accountUser || '',
+              accountPass: m.accountPass || '',
+              loginMethod: m.loginMethod || 'Kabam ID',
+              paymentMethod: getMissionPaymentMethod(m),
+              workerId: m.workerId || 'unassigned',
+              missionsCount: 1,
+              totalSpentEUR: Number(m.priceTotalEUR) || 0
+            });
+          } else {
+            const existing = clientMap.get(key);
+            existing.missionsCount += 1;
+            existing.totalSpentEUR += (Number(m.priceTotalEUR) || 0);
+            if (!existing.clientContact && m.clientContact) existing.clientContact = m.clientContact;
+            if (!existing.accountUser && m.accountUser) existing.accountUser = m.accountUser;
+            if (!existing.accountPass && m.accountPass) existing.accountPass = m.accountPass;
+            if (!existing.loginMethod && m.loginMethod) existing.loginMethod = m.loginMethod;
+          }
+        });
+
+        return Array.from(clientMap.values()).sort((a, b) => {
+          if (b.missionsCount !== a.missionsCount) return b.missionsCount - a.missionsCount;
+          return b.totalSpentEUR - a.totalSpentEUR;
+        });
+      }, [missions]);
+
+      const matchingClientSuggestions = useMemo(() => {
+        const q = (missionForm.clientName || '').trim().toLowerCase();
+        if (!q) return knownClientsDatabase.slice(0, 6);
+        return knownClientsDatabase.filter(c =>
+          c.clientName.toLowerCase().includes(q) ||
+          (c.accountUser && c.accountUser.toLowerCase().includes(q))
+        ).slice(0, 6);
+      }, [knownClientsDatabase, missionForm.clientName]);
+
+      const handleSelectKnownClient = (clientData) => {
+        setMissionForm(prev => ({
+          ...prev,
+          clientName: clientData.clientName,
+          clientContact: clientData.clientContact || prev.clientContact,
+          loginMethod: clientData.loginMethod || prev.loginMethod || 'Kabam ID',
+          accountUser: clientData.accountUser || prev.accountUser,
+          accountPass: clientData.accountPass || prev.accountPass,
+          paymentMethod: clientData.paymentMethod || prev.paymentMethod || 'Bizum'
+        }));
+        setShowClientSuggestions(false);
+        showToast(`⚡ Datos de ${clientData.clientName} autocompletados`);
+      };
+
+      const clientAnalytics = useMemo(() => {
+        const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
+        const totalMissionsInPeriod = filteredMissions.length;
+        const map = new Map();
+
+        filteredMissions.forEach(m => {
+          const rawName = (m.clientName || '').trim();
+          if (!rawName || isExcludedInternalClient(rawName)) return;
+          const key = rawName.toLowerCase();
+
+          const rev = Number(m.priceTotalEUR) || 0;
+          const costUSD = Number(m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD) || 0;
+
+          if (!map.has(key)) {
+            map.set(key, {
+              key,
+              clientName: rawName,
+              clientContact: m.clientContact || '',
+              accountUser: m.accountUser || '',
+              accountPass: m.accountPass || '',
+              loginMethod: m.loginMethod || 'Kabam ID',
+              paymentMethod: getMissionPaymentMethod(m),
+              count: 0,
+              revenueEUR: 0,
+              workerCostUSD: 0
+            });
+          }
+
+          const item = map.get(key);
+          item.count += 1;
+          item.revenueEUR += rev;
+          item.workerCostUSD += costUSD;
+          if (!item.accountUser && m.accountUser) item.accountUser = m.accountUser;
+          if (!item.accountPass && m.accountPass) item.accountPass = m.accountPass;
+          if (!item.clientContact && m.clientContact) item.clientContact = m.clientContact;
+        });
+
+        const statsList = Array.from(map.values()).map(item => {
+          const workerCostEUR = item.workerCostUSD * 0.92;
+          const netProfitEUR = item.revenueEUR - workerCostEUR;
+          const percentage = totalMissionsInPeriod > 0 ? Math.round((item.count / totalMissionsInPeriod) * 100) : 0;
+          return {
+            ...item,
+            workerCostEUR,
+            netProfitEUR,
+            percentage
+          };
+        });
+
+        statsList.sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return b.revenueEUR - a.revenueEUR;
+        });
+
+        const maxCount = statsList.length > 0 ? Math.max(...statsList.map(s => s.count), 1) : 1;
+
+        return { statsList, maxCount, totalClients: statsList.length };
+      }, [missions, tagStatsPeriod]);
+
+      const handleSaveTag = async (e) => {
+        e.preventDefault();
+        const cleanName = tagForm.name.trim();
+        if (!cleanName) { showToast('⚠️ Escribe un nombre para la etiqueta'); return; }
+
+        if (editingTag) {
+          if (db) { await setDoc(doc(db, "tags", editingTag.id), { ...editingTag, name: cleanName, color: tagForm.color }, { merge: true }); }
+          showToast(`🏷️ Etiqueta "${cleanName}" actualizada`);
+          setEditingTag(null);
+        } else {
+          const newId = `tag-${Date.now()}`;
+          if (db) { await setDoc(doc(db, "tags", newId), { id: newId, name: cleanName, color: tagForm.color, createdAt: Date.now() }); }
+          showToast(`🏷️ Etiqueta "${cleanName}" creada`);
+        }
+        setTagForm({ name: '', color: 'indigo' });
+      };
+
+      const handleQuickCreateTagInModal = async () => {
+        const cleanName = quickTagName.trim();
+        if (!cleanName) return;
+        const newId = `tag-${Date.now()}`;
+        if (db) { await setDoc(doc(db, "tags", newId), { id: newId, name: cleanName, color: quickTagColor, createdAt: Date.now() }); }
+        setMissionForm(prev => ({ ...prev, tags: [...(prev.tags || []), newId] }));
+        setQuickTagName('');
+        showToast(`🏷️ Etiqueta "${cleanName}" añadida y seleccionada`);
+      };
+
+      const handleDeleteTag = async () => {
+        if (!tagToDelete) return;
+        if (db) {
+          await deleteDoc(doc(db, "tags", tagToDelete.id));
+          const affected = missions.filter(m => getMissionTagIds(m).includes(tagToDelete.id));
+          for (const m of affected) {
+            await setDoc(doc(db, "missions", m.id), { tags: getMissionTagIds(m).filter(id => id !== tagToDelete.id) }, { merge: true });
+          }
+        }
+        if (tagFilter === tagToDelete.id) setTagFilter('ALL');
+        showToast('🗑️ Etiqueta eliminada');
+        setTagToDelete(null);
+      };
+
+      const toggleTagInMissionForm = (tagId) => setMissionForm(prev => {
+        const current = Array.isArray(prev.tags) ? prev.tags : [];
+        return current.includes(tagId) ? { ...prev, tags: current.filter(id => id !== tagId) } : { ...prev, tags: [...current, tagId] };
+      });
+
+      const handleLiquidateWorker = async (workerId) => {
+        const worker = workers.find(w => w.id === workerId);
+        if (!worker) return;
+
+        const pendingMissionsToPay = missions.filter(m => m.workerId === workerId && m.status === 'Completada' && Number(m.workerPayUSD) > 0);
+        const amountUSD = pendingMissionsToPay.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
+
+        if (amountUSD <= 0) { showToast(`⚠️ ${worker.name} no tiene saldo pendiente`); return; }
+
+        const newPaidEntry = { month: `${getCurrentMonthYear()} (Liquidado)`, amountPaidUSD: amountUSD, missionsCount: pendingMissionsToPay.length };
+        const updatedPaidHistory = [...(worker.paidHistory || []), newPaidEntry];
+
+        if (db) {
+          await setDoc(doc(db, "workers", workerId), { ...worker, paidHistory: updatedPaidHistory }, { merge: true });
+          for (const pm of pendingMissionsToPay) {
+            await setDoc(doc(db, "missions", pm.id), { originalWorkerPayUSD: pm.workerPayUSD, workerPayUSD: 0, isPaidToWorker: true }, { merge: true });
+          }
+          // Notificar al mercenario de su pago liquidado
+          await pushCloudNotification({
+            recipient: workerId,
+            title: '💸 ¡Pago Liquidado!',
+            message: `El Creador ha liquidado tu saldo pendiente de $${amountUSD} USD (${pendingMissionsToPay.length} misiones).`,
+            eventType: 'completed',
+            missionTitle: `Liquidación ${getCurrentMonthYear()}`,
+            clientName: ''
+          });
+        }
+        showToast(`💸 ¡Liquidación de $${amountUSD} efectuada a ${worker.name}!`);
+      };
+
+      // Guardar o Editar Misión (Dispara notificaciones si se asigna o quita a un mercenario)
+      const handleSaveMission = async (e) => {
+        e.preventDefault();
+        if (!missionForm.clientName.trim() || !missionForm.missionTitle.trim()) { showToast('⚠️ Faltan datos requeridos'); return; }
+
+        const targetMonthYear = editingMission ? (editingMission.monthYear || getCurrentMonthYear()) : getCurrentMonthYear();
+        const payload = {
+          ...missionForm,
+          priceTotalEUR: Number(missionForm.priceTotalEUR) || 0,
+          workerPayUSD: Number(missionForm.workerPayUSD) || 0,
+          paymentMethod: missionForm.paymentMethod === 'PayPal' ? 'PayPal' : 'Bizum',
+          tags: Array.isArray(missionForm.tags) ? missionForm.tags : [],
+          monthYear: targetMonthYear
+        };
+
+        if (editingMission) {
+          const prevWorkerId = editingMission.workerId || 'unassigned';
+          const nextWorkerId = payload.workerId || 'unassigned';
+
+          if (db) {
+            await setDoc(doc(db, "missions", editingMission.id), { ...editingMission, ...payload }, { merge: true });
+
+            // Si cambió el mercenario asignado desde el modal de editar:
+            if (prevWorkerId !== nextWorkerId) {
+              if (prevWorkerId !== 'unassigned') {
+                await pushCloudNotification({
+                  recipient: prevWorkerId,
+                  title: '⚠️ Misión Retirada',
+                  message: `Se te ha retirado la misión "${payload.missionTitle}" del cliente ${payload.clientName}.`,
+                  eventType: 'removed',
+                  missionTitle: payload.missionTitle,
+                  clientName: payload.clientName
+                });
+              }
+              if (nextWorkerId !== 'unassigned') {
+                await pushCloudNotification({
+                  recipient: nextWorkerId,
+                  title: '🎯 Nueva Misión Asignada',
+                  message: `Tienes asignada la misión "${payload.missionTitle}" (Cliente: ${payload.clientName} • Pago: $${payload.workerPayUSD} USD).`,
+                  eventType: 'assigned',
+                  missionTitle: payload.missionTitle,
+                  clientName: payload.clientName
+                });
+              }
+            }
+          }
+          showToast('✅ Misión actualizada');
+        } else {
+          const nowTs = Date.now();
+          const newId = `mission-${nowTs}`;
+          const newM = { ...payload, id: newId, status: 'Pendiente', orderIndex: missions.length + 1, createdAt: nowTs, startedAt: null, completedAt: null, completionNotes: '' };
+          if (db) {
+            await setDoc(doc(db, "missions", newId), newM);
+
+            // Si al crear la misión ya va asignada a un mercenario, le notificamos al instante
+            if (payload.workerId && payload.workerId !== 'unassigned') {
+              await pushCloudNotification({
+                recipient: payload.workerId,
+                title: '🎯 Nueva Misión Asignada',
+                message: `El Creador te ha asignado "${payload.missionTitle}" (Cliente: ${payload.clientName} • Pago: $${payload.workerPayUSD} USD).`,
+                eventType: 'assigned',
+                missionTitle: payload.missionTitle,
+                clientName: payload.clientName
+              });
+            }
+          }
+          setMonthFilter(targetMonthYear);
+          if (statusFilter === 'Completada') setStatusFilter('ACTIVE');
+          showToast(`✅ Misión registrada (${payload.paymentMethod})`);
+        }
+        setIsMissionModalOpen(false);
+      };
+
+      // Cambiar asignación de mercenario desde el selector rápido de la tarjeta
+      const handleQuickWorkerReassign = async (mission, newWorkerId) => {
+        if (!db) return;
+        const oldWorkerId = mission.workerId || 'unassigned';
+        if (oldWorkerId === newWorkerId) return;
+
+        try {
+          await setDoc(doc(db, "missions", mission.id), { workerId: newWorkerId }, { merge: true });
+
+          const oldWorkerObj = workers.find(w => w.id === oldWorkerId);
+          const newWorkerObj = workers.find(w => w.id === newWorkerId);
+
+          if (oldWorkerId !== 'unassigned') {
+            await pushCloudNotification({
+              recipient: oldWorkerId,
+              title: '⚠️ Misión Retirada de tu Cola',
+              message: `El Creador ha retirado o reasignado la misión "${mission.missionTitle}" (Cliente: ${mission.clientName}).`,
+              eventType: 'removed',
+              missionTitle: mission.missionTitle,
+              clientName: mission.clientName
+            });
+          }
+
+          if (newWorkerId !== 'unassigned') {
+            await pushCloudNotification({
+              recipient: newWorkerId,
+              title: '🎯 Nueva Misión Asignada',
+              message: `El Creador te ha asignado "${mission.missionTitle}" (Cliente: ${mission.clientName} • Pago: $${mission.workerPayUSD} USD).`,
+              eventType: 'assigned',
+              missionTitle: mission.missionTitle,
+              clientName: mission.clientName
+            });
+          }
+
+          if (newWorkerObj) {
+            showToast(`🥷 Misión asignada a ${newWorkerObj.name} (Notificado)`);
+          } else if (oldWorkerObj) {
+            showToast(`⚠️ Misión retirada a ${oldWorkerObj.name} (Notificado)`);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // Cambiar estado desde el selector rápido del Creador
+      const handleCreatorQuickStatusChange = async (mission, newStatus) => {
+        if (!db || mission.status === newStatus) return;
+        try {
+          await setDoc(doc(db, "missions", mission.id), {
+            status: newStatus,
+            completedAt: newStatus === 'Completada' ? Date.now() : (mission.completedAt || null)
+          }, { merge: true });
+
+          if (mission.workerId && mission.workerId !== 'unassigned') {
+            await pushCloudNotification({
+              recipient: mission.workerId,
+              title: `🔄 Estado cambiado a ${newStatus}`,
+              message: `El Creador cambió el estado de "${mission.missionTitle}" (${mission.clientName}) a ${newStatus}.`,
+              eventType: newStatus === 'Completada' ? 'completed' : 'status_changed',
+              missionTitle: mission.missionTitle,
+              clientName: mission.clientName
+            });
+          }
+          showToast(`Estado cambiado a ${newStatus}`);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handleQuickTogglePaymentMethod = async (mission) => {
+        if (!db) return;
+        const currentMethod = getMissionPaymentMethod(mission);
+        const nextMethod = currentMethod === 'Bizum' ? 'PayPal' : 'Bizum';
+        try {
+          await setDoc(doc(db, "missions", mission.id), { paymentMethod: nextMethod }, { merge: true });
+          showToast(`💳 Método cambiado a ${nextMethod}`);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      // Cuando el Mercenario pulsa "Empezar Misión" -> Notifica al Creador
+      const handleStartMission = async (mission) => {
+        if (db) {
+          await setDoc(doc(db, "missions", mission.id), { status: 'En Progreso', startedAt: Date.now() }, { merge: true });
+          const workerName = currentIsolatedWorker?.name || 'Un mercenario';
+          await pushCloudNotification({
+            recipient: 'creator',
+            title: `⚡ ${workerName} empezó una misión`,
+            message: `${workerName} ha puesto EN CURSO "${mission.missionTitle}" del cliente ${mission.clientName}.`,
+            eventType: 'started',
+            missionTitle: mission.missionTitle,
+            clientName: mission.clientName
+          });
+        }
+        showToast('▶️ Misión puesta En Curso (Creador notificado)');
+      };
+
+      const handlePrioritizeMission = async (mission) => {
+        if (!activeWorkerQueue || activeWorkerQueue.length === 0) return;
+        const minPrio = Math.min(...activeWorkerQueue.map(m => m.workerPriorityOrder !== undefined ? Number(m.workerPriorityOrder) : 0));
+        if (db) { await setDoc(doc(db, "missions", mission.id), { workerPriorityOrder: minPrio - 1 }, { merge: true }); }
+        showToast('⬆️ Misión priorizada');
+      };
+
+      // Cuando el Mercenario marca como "Completada" -> Notifica al Creador
+      const handleConfirmCompleteMission = async (e) => {
+        e.preventDefault();
+        if (!completingMission) return;
+        const finalNote = completionNoteInput.trim() || 'Completado con éxito.';
+        if (db) {
+          await setDoc(doc(db, "missions", completingMission.id), {
+            status: 'Completada',
+            completedAt: Date.now(),
+            completionNotes: finalNote
+          }, { merge: true });
+
+          const workerName = currentIsolatedWorker?.name || 'Un mercenario';
+          await pushCloudNotification({
+            recipient: 'creator',
+            title: `✅ ¡${workerName} completó una misión!`,
+            message: `${workerName} ha finalizado "${completingMission.missionTitle}" (Cliente: ${completingMission.clientName}). Nota: "${finalNote}"`,
+            eventType: 'completed',
+            missionTitle: completingMission.missionTitle,
+            clientName: completingMission.clientName
+          });
+        }
+        showToast('✅ ¡Misión finalizada! Creador notificado');
+        setCompletingMission(null);
+        setCompletionNoteInput('');
+      };
+
+      // Si el Creador elimina una misión que estaba activa en la cola de un mercenario -> Le avisa que ya no está
+      const handleDeleteMission = async () => {
+        if (!missionToDelete) return;
+        if (db) {
+          const prevWorkerId = missionToDelete.workerId;
+          const wasActive = missionToDelete.status !== 'Completada';
+          await deleteDoc(doc(db, "missions", missionToDelete.id));
+
+          if (prevWorkerId && prevWorkerId !== 'unassigned' && wasActive) {
+            await pushCloudNotification({
+              recipient: prevWorkerId,
+              title: '🗑️ Misión Eliminada de tu Cola',
+              message: `El Creador ha eliminado la misión "${missionToDelete.missionTitle}" (Cliente: ${missionToDelete.clientName}).`,
+              eventType: 'removed',
+              missionTitle: missionToDelete.missionTitle,
+              clientName: missionToDelete.clientName
+            });
+          }
+        }
+        showToast('🗑️ Misión eliminada');
+        setMissionToDelete(null);
+      };
+
+      const handleSaveWorker = async (e) => {
+        e.preventDefault();
+        if (!workerForm.name.trim() || !workerForm.email.trim()) { showToast('⚠️ Introduce nombre y Correo Firebase'); return; }
+        
+        const cleanEmail = workerForm.email.trim().toLowerCase();
+
+        if (editingWorker) {
+          if (db) { await setDoc(doc(db, "workers", editingWorker.id), { ...editingWorker, name: workerForm.name.trim(), email: cleanEmail, specialty: workerForm.specialty.trim(), color: workerForm.color }, { merge: true }); }
+          showToast(`🥷 Mercenario ${workerForm.name} actualizado`);
+        } else {
+          const newId = `worker-${Date.now()}`;
+          const newW = { id: newId, name: workerForm.name.trim(), email: cleanEmail, specialty: workerForm.specialty.trim() || 'Mercenario', color: workerForm.color || WORKER_COLOR_OPTIONS[0].id, paidHistory: [] };
+          if (db) { await setDoc(doc(db, "workers", newId), newW); }
+          showToast(`🥷 Mercenario ${newW.name} creado`);
+        }
+        setIsWorkerModalOpen(false);
+      };
+
+      const handleQuickWorkerColorChange = async (worker, newColorId) => {
+        if (!db) return;
+        try {
+          await setDoc(doc(db, "workers", worker.id), { ...worker, color: newColorId }, { merge: true });
+          const colorMeta = getWorkerColorMeta(newColorId);
+          showToast(`🎨 Color de ${worker.name}: ${colorMeta.label}`);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      const handleDeleteWorker = async () => {
+        if (!workerToDelete) return;
+        if (db) {
+          await deleteDoc(doc(db, "workers", workerToDelete.id));
+          const workerMissions = missions.filter(m => m.workerId === workerToDelete.id);
+          for (const wm of workerMissions) { await setDoc(doc(db, "missions", wm.id), { workerId: 'unassigned' }, { merge: true }); }
+        }
+        showToast('🗑️ Mercenario eliminado');
+        setWorkerToDelete(null);
+      };
+
+      const copyToClipboard = (text, label) => {
+        if (!text) return;
+        if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+        showToast(`📋 ${label} copiado`);
+      };
+
+      const toggleCredentials = (id) => setVisibleCredentials(prev => ({ ...prev, [id]: !prev[id] }));
+
+      const getPriorityBadge = (priority) => {
+        if (priority === 'Urgente') return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">URGENTE</span>;
+        if (priority === 'VIP') return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">VIP</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300">Normal</span>;
+      };
+
+      const getStatusBadge = (status) => {
+        if (status === 'En Progreso') return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> ⚡ En Curso</span>;
+        if (status === 'Completada') return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">✓ Completada</span>;
+        return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1">⏳ Pendiente</span>;
+      };
+
+      const renderPaymentMethodBadge = (mission) => {
+        const method = getMissionPaymentMethod(mission);
+        const isPaypal = method === 'PayPal';
+        return (
+          <button
+            type="button"
+            onClick={() => handleQuickTogglePaymentMethod(mission)}
+            title="Clic para cambiar rápido entre Bizum y PayPal"
+            className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold border flex items-center gap-1 transition ${
+              isPaypal
+                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                : 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isPaypal ? 'bg-blue-400' : 'bg-rose-400'}`} />
+            {isPaypal ? '💳 PayPal' : '📱 Bizum'}
+          </button>
+        );
+      };
+
+      const renderMissionTags = (mission) => {
+        const missionTagIds = getMissionTagIds(mission);
+        if (missionTagIds.length === 0) return null;
+        return missionTagIds.map(tId => {
+          const tagObj = tags.find(t => t.id === tId);
+          if (!tagObj) return null;
+          const colorMeta = getTagColorMeta(tagObj.color);
+          return (
+            <span key={tId} className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${colorMeta.badgeClass}`}>
+              <Tag className="w-2.5 h-2.5" /> {tagObj.name}
+            </span>
+          );
+        });
+      };
+
+      // Componente del Botón y Panel Desplegable de Notificaciones (para Creador y Mercenario)
+      const renderNotificationBell = () => {
+        return (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsNotifPanelOpen(!isNotifPanelOpen)}
+              className={`relative p-2.5 rounded-xl border transition flex items-center gap-1.5 ${
+                unreadNotifCount > 0
+                  ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 hover:bg-amber-500/25'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Centro de Notificaciones"
+            >
+              {unreadNotifCount > 0 ? (
+                <BellRing className="w-4 h-4 text-amber-400 animate-bounce" />
+              ) : (
+                <Bell className="w-4 h-4" />
+              )}
+              {unreadNotifCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-extrabold">
+                  {unreadNotifCount}
+                </span>
+              )}
+            </button>
+
+            {isNotifPanelOpen && (
+              <div className="fixed sm:absolute right-3 left-3 sm:left-auto sm:right-0 mt-2 sm:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                <div className="p-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-extrabold text-white">Notificaciones ({unreadNotifCount} sin leer)</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSoundEnabled(!soundEnabled)}
+                      className={`p-1.5 rounded-lg border text-xs ${
+                        soundEnabled ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-slate-900 border-slate-800 text-slate-500'
+                      }`}
+                      title={soundEnabled ? 'Sonido activado' : 'Sonido silenciado'}
+                    >
+                      {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                    </button>
+
+                    {unreadNotifCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllNotifsAsRead}
+                        className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1"
+                        title="Marcar todas como leídas"
+                      >
+                        <CheckCheck className="w-3 h-3" /> Leer todas
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsNotifPanelOpen(false)}
+                      className="text-slate-400 hover:text-white px-1 text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Botón opcional para activar notificaciones nativas del sistema/móvil */}
+                {browserNotifPermission === 'default' && (
+                  <div className="px-3.5 py-2 bg-indigo-950/50 border-b border-indigo-500/30 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-indigo-200">¿Recibir avisos nativos en el móvil/PC?</span>
+                    <button
+                      type="button"
+                      onClick={requestBrowserNotificationPermission}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-extrabold shrink-0"
+                    >
+                      📲 Activar
+                    </button>
+                  </div>
+                )}
+
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-800/80">
+                  {myNotifications.length > 0 ? (
+                    myNotifications.map(n => {
+                      const isRemoved = n.eventType === 'removed';
+                      const isCompleted = n.eventType === 'completed';
+                      const isStarted = n.eventType === 'started';
+
+                      return (
+                        <div
+                          key={n.id}
+                          onClick={() => handleMarkNotifAsRead(n)}
+                          className={`p-3.5 text-xs transition cursor-pointer flex items-start justify-between gap-3 ${
+                            !n.read ? 'bg-slate-800/70 hover:bg-slate-800' : 'bg-slate-900/40 opacity-75 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {!n.read && <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />}
+                              <span className={`font-extrabold ${
+                                isRemoved ? 'text-rose-400' : isCompleted ? 'text-emerald-400' : isStarted ? 'text-amber-300' : 'text-indigo-300'
+                              }`}>
+                                {n.title}
+                              </span>
+                            </div>
+                            <p className="text-slate-200 text-[11px] leading-relaxed break-words">{n.message}</p>
+                            <span className="text-[10px] text-slate-500 block">{formatAddedDate(n.createdAt)}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 text-center space-y-1.5 text-slate-400">
+                      <Bell className="w-7 h-7 mx-auto text-slate-600" />
+                      <p className="text-xs font-bold text-slate-300">No tienes notificaciones</p>
+                      <p className="text-[11px] text-slate-500">Aquí aparecerán los cambios de estado y asignaciones en vivo.</p>
+                    </div>
+                  )}
+                </div>
+
+                {myNotifications.length > 0 && (
+                  <div className="p-2.5 bg-slate-950 border-t border-slate-800 flex justify-between items-center">
+                    <span className="text-[10px] text-slate-500">Sincronizado en tiempo real</span>
+                    <button
+                      type="button"
+                      onClick={handleClearAllMyNotifications}
+                      className="text-[11px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" /> Vaciar historial
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const renderWorkerMissionCard = (m, index) => {
+        const isFirst = index === 0;
+        const isInProgress = m.status === 'En Progreso';
+
+        return (
+          <div key={m.id} className={`bg-slate-900 rounded-2xl p-4 space-y-3 shadow-xl transition ${isInProgress ? 'border-2 border-amber-500/60' : isFirst ? 'border-2 border-indigo-500/50' : 'border border-slate-800'}`}>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`px-2.5 py-1 rounded text-[11px] font-extrabold uppercase ${isInProgress ? 'bg-amber-500 text-slate-950' : isFirst ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                  {isInProgress ? '⚡ En Curso' : isFirst ? '🎯 Siguiente Cuenta' : `⏳ En Cola #${index + 1}`}
+                </span>
+                {getPriorityBadge(m.priority)}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {!isFirst && (
+                  <button onClick={() => handlePrioritizeMission(m)} title="Subir al primer lugar" className="px-2.5 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-extrabold flex items-center gap-1 transition">
+                    <ArrowUp className="w-3 h-3" /> Priorizar
+                  </button>
+                )}
+                <span className="text-xs font-extrabold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20">
+                  Tu Pago: ${m.workerPayUSD} USD
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">{renderMissionTags(m)}</div>
+              <h3 className="text-base font-extrabold text-white">{m.missionTitle}</h3>
+              <p className="text-xs text-slate-300 mt-1">Cliente: <strong className="text-white">{m.clientName}</strong></p>
+            </div>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Credenciales ({m.loginMethod || 'Kabam ID'})</span>
+                <button onClick={() => toggleCredentials(m.id)} className="text-indigo-400 font-bold flex items-center gap-1">
+                  {visibleCredentials[m.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <div className="bg-slate-900 p-2.5 rounded-lg flex items-center justify-between text-xs">
+                <span className="font-mono text-slate-200 break-all">{m.accountUser || 'Sin usuario'}</span>
+                <button onClick={() => copyToClipboard(m.accountUser, 'Usuario')} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 font-bold shrink-0 ml-2">Copiar</button>
+              </div>
+              <div className="bg-slate-900 p-2.5 rounded-lg flex items-center justify-between text-xs">
+                <span className="font-mono text-amber-300 break-all">{visibleCredentials[m.id] ? (m.accountPass || 'Sin contraseña') : '••••••••••••'}</span>
+                <button onClick={() => copyToClipboard(m.accountPass, 'Contraseña')} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 font-bold shrink-0 ml-2">Copiar</button>
+              </div>
+            </div>
+
+            {m.instructions && (
+              <div className="bg-indigo-950/40 p-3 rounded-xl border border-indigo-500/30 text-xs text-slate-200">
+                <strong>Instrucciones:</strong> {m.instructions}
+              </div>
+            )}
+
+            <div className="space-y-2 pt-1">
+              {m.status === 'Pendiente' ? (
+                <button onClick={() => handleStartMission(m)} className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 transition">
+                  <Play className="w-4 h-4 fill-slate-950" /> Empezar Misión
+                </button>
+              ) : (
+                <div className="text-center py-2 text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl">⚡ Misión actualmente en curso...</div>
+              )}
+              <button onClick={() => { setCompletingMission(m); setCompletionNoteInput(''); }} className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 transition">
+                <Check className="w-4 h-4 stroke-[3]" /> Marcar como Completada
+              </button>
+            </div>
+          </div>
+        );
+      };
+
+      if (isAuthChecking) {
+        return (
+          <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+            <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
+          </div>
+        );
+      }
+
+      if (!authUser) {
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center mx-auto">
+                  <Lock className="w-7 h-7" />
+                </div>
+                <h1 className="text-2xl font-extrabold text-white">Acceso Seguro</h1>
+                <p className="text-xs text-slate-400">
+                  Introduce tu correo y contraseña registrados para acceder a tu panel de misiones.
+                </p>
+              </div>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Correo de usuario</label>
+                  <input type="email" required value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder="usuario@misiones.com" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Contraseña</label>
+                  <input type="password" required value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="••••••••" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 font-mono tracking-widest text-white text-center text-lg focus:outline-none focus:border-indigo-500" />
+                  {loginError && <p className="text-xs text-rose-400 mt-2 font-semibold text-center">{loginError}</p>}
+                </div>
+                <button type="submit" className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm shadow-lg shadow-indigo-600/30 transition mt-2">Entrar</button>
+              </form>
+              <div className="pt-2 border-t border-slate-800/80 text-center">
+                <button type="button" onClick={() => setShowPwaHint(!showPwaHint)} className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center justify-center gap-1.5 mx-auto"><Smartphone className="w-3.5 h-3.5" /> ¿Cómo instalar como App en tu móvil?</button>
+                {showPwaHint && (
+                  <div className="mt-2.5 bg-slate-950 border border-slate-800 rounded-xl p-3 text-left text-[11px] text-slate-300 space-y-1.5">
+                    <p>📱 <strong className="text-white">En Android:</strong> Toca los 3 puntitos arriba a la derecha y pulsa <strong>"Añadir a pantalla de inicio"</strong>.</p>
+                    <p>🍏 <strong className="text-white">En iPhone:</strong> Toca Compartir y selecciona <strong>"Añadir a pantalla de inicio"</strong>.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (!isCreatorSession && !currentIsolatedWorker) {
+        return (
+          <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl text-center space-y-4 max-w-sm">
+              <Lock className="w-10 h-10 text-rose-500 mx-auto" />
+              <h2 className="text-white font-bold">Cuenta no asignada</h2>
+              <p className="text-xs text-slate-400">Has iniciado sesión correctamente, pero el administrador aún no ha vinculado tu correo a un perfil de mercenario.</p>
+              <button onClick={handleLogout} className="px-4 py-2 bg-slate-800 rounded-xl text-xs font-bold">Cerrar sesión</button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20">
+          {/* BANNER EMERGENTE SUPERIOR DE NOTIFICACIÓN EN VIVO */}
+          {liveBannerAlert && (
+            <div
+              onClick={() => {
+                handleMarkNotifAsRead(liveBannerAlert);
+                setLiveBannerAlert(null);
+              }}
+              className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] bg-slate-900/95 backdrop-blur-md border-2 border-amber-500/70 rounded-2xl p-4 shadow-2xl cursor-pointer flex items-start gap-3 animate-bounce"
+            >
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 shrink-0">
+                <BellRing className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-extrabold text-amber-300">{liveBannerAlert.title}</div>
+                <p className="text-xs text-white mt-0.5 line-clamp-2">{liveBannerAlert.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLiveBannerAlert(null);
+                }}
+                className="text-slate-400 hover:text-white text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {toastMessage && (
+            <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border bg-slate-900 border-indigo-500/50 text-white">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span className="text-sm font-medium">{toastMessage.text}</span>
+            </div>
+          )}
+
+          <main className="max-w-7xl mx-auto px-4 pt-6">
+            {!isCreatorSession ? (
+              <div className="max-w-lg mx-auto space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${getWorkerColorMeta(currentIsolatedWorker?.color).gradient} flex items-center justify-center font-extrabold text-white text-sm shadow`}>
+                      {currentIsolatedWorker?.name?.slice(0, 2).toUpperCase() || 'W'}
+                    </div>
+                    <div>
+                      <h2 className="font-extrabold text-white text-base">{currentIsolatedWorker?.name}</h2>
+                      <p className="text-xs text-slate-400">{currentIsolatedWorker?.specialty}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {renderNotificationBell()}
+                    <button onClick={handleLogout} className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition">
+                      <LogOut className="w-4 h-4" /> Salir
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 bg-slate-900 p-1 rounded-xl border border-slate-800 gap-1">
+                  <button onClick={() => setWorkerTab('queue')} className={`py-2.5 px-2 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 ${workerTab === 'queue' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>
+                    <Sword className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Mis Misiones ({activeWorkerQueue.length})</span>
+                  </button>
+                  <button onClick={() => setWorkerTab('completed')} className={`py-2.5 px-2 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 ${workerTab === 'completed' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Finalizadas ({completedWorkerMissions.length})</span>
+                  </button>
+                  <button onClick={() => setWorkerTab('earnings')} className={`py-2.5 px-2 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center justify-center gap-1 ${workerTab === 'earnings' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>
+                    <DollarSign className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Ganancias ($)</span>
+                  </button>
+                </div>
+
+                {workerTab === 'queue' ? (
+                  <div className="space-y-4">
+                    {activeWorkerQueue.length > 0 ? (
+                      <>
+                        {renderWorkerMissionCard(activeWorkerQueue[0], 0)}
+                        {activeWorkerQueue.length > 1 && (
+                          <div className="space-y-3 pt-2">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-xs font-bold uppercase text-slate-400">Próximas en Mis Misiones ({activeWorkerQueue.length - 1}):</span>
+                              <span className="text-[11px] text-indigo-400">Puedes priorizarlas o empezarlas a la vez</span>
+                            </div>
+                            {activeWorkerQueue.slice(1).map((m, idx) => renderWorkerMissionCard(m, idx + 1))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="bg-slate-900 p-8 rounded-2xl text-center space-y-2 border border-slate-800">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                        <h3 className="font-bold text-white text-sm">¡Sin misiones pendientes!</h3>
+                        <p className="text-xs text-slate-400">Has completado todas tus cuentas asignadas.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : workerTab === 'completed' ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-xs font-bold uppercase text-slate-400 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Misiones Finalizadas ({completedWorkerMissions.length})</h3>
+                    </div>
+                    {completedWorkerMissions.length > 0 ? (
+                      completedWorkerMissions.map((m) => {
+                        const displayPay = m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD;
+                        const isPaid = m.isPaidToWorker || Number(m.workerPayUSD) === 0;
+                        return (
+                          <div key={m.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2.5 shadow">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">✓ Finalizada • {m.monthYear}</span>
+                                {renderMissionTags(m)}
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-xs font-extrabold ${isPaid ? 'bg-slate-800 text-slate-300' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                ${displayPay} USD {isPaid ? '(Ya Liquidado)' : '(Pendiente de cobro)'}
+                              </span>
+                            </div>
+                            <div>
+                              <h4 className="font-extrabold text-white text-sm">{m.missionTitle}</h4>
+                              <p className="text-xs text-slate-400 mt-0.5">Cliente: <strong className="text-slate-200">{m.clientName}</strong></p>
+                            </div>
+                            {m.completionNotes && (
+                              <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300"><span className="text-slate-400 font-bold">Nota al finalizar:</span> {m.completionNotes}</div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="bg-slate-900 p-8 rounded-2xl text-center space-y-2 border border-slate-800">
+                        <Clock className="w-10 h-10 text-slate-500 mx-auto" />
+                        <h3 className="font-bold text-white text-sm">Aún no hay misiones finalizadas</h3>
+                        <p className="text-xs text-slate-400">Cuando completes una misión aparecerá guardada aquí.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {(() => {
+                      const currentMonth = getCurrentMonthYear();
+                      const currentMonthMissions = completedWorkerMissions.filter(m => m.monthYear === currentMonth);
+                      const currentMonthEarnedUSD = currentMonthMissions.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
+                      const totalPendingAllMonthsUSD = completedWorkerMissions.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
+                      return (
+                        <div className="bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/40 rounded-2xl p-5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase text-emerald-300 flex items-center gap-1"><Calendar className="w-4 h-4" /> {currentMonth} (Mes Actual)</span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">{currentMonthMissions.length} completadas este mes</span>
+                          </div>
+                          <div>
+                            <div className="text-3xl font-extrabold text-white">${currentMonthEarnedUSD} <span className="text-sm font-normal text-slate-400">USD</span></div>
+                            {totalPendingAllMonthsUSD !== currentMonthEarnedUSD && (
+                              <p className="text-xs text-amber-300 font-bold mt-1">Total acumulado sin liquidar (incluyendo meses previos): ${totalPendingAllMonthsUSD} USD</p>
+                            )}
+                            <p className="text-xs text-slate-400 mt-1">Saldo pendiente de cobro</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold uppercase text-slate-400 flex items-center gap-1"><History className="w-3.5 h-3.5" /> Historial de Pagos Recibidos</h4>
+                      {currentIsolatedWorker?.paidHistory && currentIsolatedWorker.paidHistory.length > 0 ? (
+                        currentIsolatedWorker.paidHistory.map((h, i) => (
+                          <div key={i} className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between text-xs">
+                            <div><span className="font-bold text-white">{h.month}</span><p className="text-slate-400">{h.missionsCount} misiones</p></div>
+                            <span className="font-extrabold text-emerald-400">${h.amountPaidUSD} USD (Pagado)</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="bg-slate-900 p-4 rounded-xl text-center text-xs text-slate-400 border border-slate-800">No hay pagos anteriores registrados.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow">
+                  <div>
+                    <h1 className="text-xl font-extrabold text-white flex items-center gap-2"><Crown className="w-6 h-6 text-emerald-400" /> Panel Maestro del Creador</h1>
+                    <p className="text-xs text-slate-400 mt-1">Protegido con <strong className="text-emerald-400">Firebase Auth</strong> • Cobros en <strong className="text-emerald-400">Euros (€)</strong> (<span className="text-rose-400 font-bold">Bizum</span> / <span className="text-blue-400 font-bold">PayPal</span>).</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {renderNotificationBell()}
+                    <button onClick={() => setCreatorTab('tags')} className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-amber-300 border border-slate-700 flex items-center gap-1.5"><Tag className="w-4 h-4" /> Etiquetas ({tags.length})</button>
+                    <button onClick={() => setCreatorTab('workers')} className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5"><Users className="w-4 h-4 text-indigo-400" /> Mercs ({workers.length})</button>
+                    <button onClick={() => {
+                        setEditingMission(null);
+                        setMissionForm({ clientName: '', clientContact: '', missionTitle: '', gameCategory: 'Exploración de Actos', accountUser: '', accountPass: '', loginMethod: 'Kabam ID', instructions: '', priority: 'Normal', workerId: workers[0]?.id || 'unassigned', priceTotalEUR: '90', workerPayUSD: '60', paymentMethod: 'Bizum', tags: [] });
+                        setIsMissionModalOpen(true);
+                      }} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-extrabold text-white shadow-lg shadow-indigo-600/30">
+                      + Nueva Misión
+                    </button>
+                    <button onClick={handleLogout} className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 text-xs font-bold flex items-center gap-1 border border-slate-700"><LogOut className="w-4 h-4" /> Salir</button>
+                  </div>
+                </div>
+
+                <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 max-w-2xl overflow-x-auto no-scrollbar">
+                  <button onClick={() => setCreatorTab('missions')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'missions' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>📋 Gestión de Misiones</button>
+                  <button onClick={() => setCreatorTab('tags')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'tags' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏷️ Etiquetas y Top Ventas</button>
+                  <button onClick={() => setCreatorTab('finances')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'finances' ? 'bg-emerald-600 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>💶 Finanzas Mensuales</button>
+                  <button onClick={() => setCreatorTab('workers')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'workers' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>👥 Gestión de Mercs</button>
+                </div>
+
+                {creatorTab === 'tags' ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 h-fit">
+                      <div><h3 className="font-extrabold text-white text-base flex items-center gap-2"><Tag className="w-4 h-4 text-amber-400" /> {editingTag ? 'Editar Etiqueta' : 'Crear Nueva Etiqueta'}</h3></div>
+                      <form onSubmit={handleSaveTag} className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1">Nombre de la Etiqueta *</label>
+                          <input type="text" required value={tagForm.name} onChange={(e) => setTagForm({ ...tagForm, name: e.target.value })} placeholder="Ej. Acto 9.1" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-2">Color de Etiqueta</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {TAG_COLOR_OPTIONS.map(c => (
+                              <button key={c.id} type="button" onClick={() => setTagForm({ ...tagForm, color: c.id })} className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${tagForm.color === c.id ? `${c.badgeClass} ring-2 ring-white/30` : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'}`}>
+                                <span className={`w-2.5 h-2.5 rounded-full ${c.barClass}`} />{c.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          {editingTag && <button type="button" onClick={() => { setEditingTag(null); setTagForm({ name: '', color: 'indigo' }); }} className="flex-1 py-2.5 bg-slate-800 text-xs font-bold rounded-xl text-slate-300">Cancelar</button>}
+                          <button type="submit" className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl transition shadow-lg shadow-amber-500/20">{editingTag ? 'Guardar Cambios' : '+ Crear Etiqueta'}</button>
+                        </div>
+                      </form>
+                      <div className="pt-4 border-t border-slate-800 space-y-2.5">
+                        <span className="text-xs font-bold uppercase text-slate-400 block">Mis Etiquetas Activas ({tags.length})</span>
+                        {tags.length > 0 ? (
+                          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                            {tags.map(t => {
+                              const colorMeta = getTagColorMeta(t.color);
+                              return (
+                                <div key={t.id} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${colorMeta.badgeClass}`}><Tag className="w-3 h-3" /> {t.name}</span>
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={() => { setEditingTag(t); setTagForm({ name: t.name, color: t.color || 'indigo' }); }} className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300"><Edit3 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => setTagToDelete(t)} className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : <p className="text-xs text-slate-500 italic">Aún no has creado ninguna etiqueta.</p>}
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-2 space-y-6">
+                      {/* BLOQUE 1: RANKING DE MISIONES MÁS CONTRATADAS */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                          <div><h3 className="font-extrabold text-white text-base flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-400" /> Ranking de Misiones Más Contratadas</h3></div>
+                          <select value={tagStatsPeriod} onChange={(e) => setTagStatsPeriod(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-amber-300">
+                            <option value="ALL">🌎 Histórico Global (Todos los meses)</option>
+                            {availableMonths.map(m => <option key={m} value={m}>📅 Solo {m}</option>)}
+                          </select>
+                        </div>
+                        {tagAnalytics.statsList.length > 0 ? (
+                          <div className="space-y-3">
+                            {tagAnalytics.statsList.map((stat, idx) => {
+                              const colorMeta = getTagColorMeta(stat.color);
+                              const barWidth = stat.count > 0 ? Math.max(Math.round((stat.count / tagAnalytics.maxCount) * 100), 6) : 0;
+                              return (
+                                <div key={stat.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800 text-xs font-extrabold text-slate-300 flex items-center justify-center">#{idx + 1}</span>
+                                      <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold border flex items-center gap-1.5 ${colorMeta.badgeClass}`}><Tag className="w-3 h-3" /> {stat.name}</span>
+                                      <span className="text-xs font-extrabold text-white">{stat.count} veces</span>
+                                      <span className="text-[11px] text-slate-400">({stat.percentage}% del total)</span>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2 text-xs flex-wrap">
+                                      <span className="font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">Ingreso: €{stat.revenueEUR}</span>
+                                      <span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">Mercs: ${stat.workerCostUSD}</span>
+                                      <span className={`font-extrabold px-2 py-1 rounded border ${stat.netProfitEUR >= 0 ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                        Puro: €{stat.netProfitEUR.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-500 ${colorMeta.barClass}`} style={{ width: `${barWidth}%` }} /></div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-2"><BarChart3 className="w-10 h-10 text-slate-500 mx-auto" /><h4 className="font-bold text-white text-sm">Crea tu primera etiqueta a la izquierda</h4></div>}
+                      </div>
+
+                      {/* BLOQUE 2: RANKING DE CLIENTES HABITUALES */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                          <div>
+                            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                              <Crown className="w-5 h-5 text-amber-400" /> Ranking de Clientes Habituales ({clientAnalytics.totalClients})
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Ordenado por cantidad de misiones contratadas (en caso de empate, primero quien más haya gastado).
+                            </p>
+                          </div>
+                        </div>
+
+                        {clientAnalytics.statsList.length > 0 ? (
+                          <div className="space-y-3">
+                            {clientAnalytics.statsList.map((client, idx) => {
+                              const barWidth = client.count > 0 ? Math.max(Math.round((client.count / clientAnalytics.maxCount) * 100), 8) : 4;
+                              const isTop3 = idx < 3;
+
+                              return (
+                                <div key={client.key} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                      <span className={`w-6 h-6 rounded-lg text-xs font-extrabold flex items-center justify-center border ${
+                                        idx === 0
+                                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                                          : idx === 1
+                                          ? 'bg-slate-400/20 border-slate-400/40 text-slate-200'
+                                          : idx === 2
+                                          ? 'bg-orange-500/20 border-orange-500/40 text-orange-300'
+                                          : 'bg-slate-900 border-slate-800 text-slate-400'
+                                      }`}>
+                                        #{idx + 1}
+                                      </span>
+                                      <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-extrabold text-white text-sm">{client.clientName}</span>
+                                          <span className="px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-extrabold">
+                                            {client.count} {client.count === 1 ? 'misión' : 'misiones'}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingMission(null);
+                                              setMissionForm({
+                                                clientName: client.clientName,
+                                                clientContact: client.clientContact || '',
+                                                missionTitle: '',
+                                                gameCategory: 'Exploración de Actos',
+                                                accountUser: client.accountUser || '',
+                                                accountPass: client.accountPass || '',
+                                                loginMethod: client.loginMethod || 'Kabam ID',
+                                                instructions: '',
+                                                priority: 'Normal',
+                                                workerId: workers[0]?.id || 'unassigned',
+                                                priceTotalEUR: '90',
+                                                workerPayUSD: '60',
+                                                paymentMethod: client.paymentMethod || 'Bizum',
+                                                tags: []
+                                              });
+                                              setIsMissionModalOpen(true);
+                                            }}
+                                            title="Crear nueva misión autocompletando este cliente"
+                                            className="px-2 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold flex items-center gap-1 transition"
+                                          >
+                                            ⚡ + Misión
+                                          </button>
+                                        </div>
+                                        {client.accountUser && (
+                                          <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                            {client.loginMethod || 'Kabam ID'}: {client.accountUser}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 text-xs flex-wrap">
+                                      <span className="font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
+                                        Ingreso: €{client.revenueEUR}
+                                      </span>
+                                      <span className="font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
+                                        Mercs: ${client.workerCostUSD}
+                                      </span>
+                                      <span className={`font-extrabold px-2 py-1 rounded border ${client.netProfitEUR >= 0 ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                                        Puro: €{client.netProfitEUR.toFixed(2)}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${isTop3 ? 'bg-gradient-to-r from-amber-500 to-emerald-400' : 'bg-indigo-500'}`}
+                                      style={{ width: `${barWidth}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
+                            <Users className="w-10 h-10 text-slate-500 mx-auto" />
+                            <h4 className="font-bold text-white text-sm">Aún no hay clientes registrados en este periodo</h4>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : creatorTab === 'finances' ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {availableMonths.map(month => {
+                        const data = creatorFinancialsByMonth[month] || {
+                          totalEUR: 0,
+                          totalUSDWorkerCost: 0,
+                          netProfitEUR: 0,
+                          missionCount: 0,
+                          bizum: { revenueEUR: 0, workerCostUSD: 0, netProfitEUR: 0, count: 0 },
+                          paypal: { revenueEUR: 0, workerCostUSD: 0, netProfitEUR: 0, count: 0 }
+                        };
+                        const isCurrent = month === getCurrentMonthYear();
+
+                        return (
+                          <div key={month} className={`bg-slate-900 border ${isCurrent ? 'border-emerald-500/50' : 'border-slate-800'} rounded-2xl p-5 space-y-4 shadow-xl`}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase text-slate-400">
+                              <span>{month}</span>
+                              <span className="px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">{data.missionCount} misiones</span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <div className="text-2xl font-extrabold text-emerald-400">
+                                €{data.totalEUR} <span className="text-xs font-normal text-slate-400">Ingresos</span>
+                              </div>
+                              <div className="text-base font-bold text-rose-400">
+                                ${data.totalUSDWorkerCost} <span className="text-xs font-normal text-slate-400">Coste Mercs</span>
+                              </div>
+
+                              <div className="pt-2.5 border-t border-slate-800 mt-1 flex items-center justify-between">
+                                <span className="text-xs font-extrabold text-amber-300 uppercase">BENEFICIO PURO:</span>
+                                <span className={`text-xl font-extrabold ${data.netProfitEUR >= 0 ? 'text-amber-400' : 'text-rose-500'}`}>
+                                  €{data.netProfitEUR.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="pt-3 border-t border-slate-800/90 space-y-2.5">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                                Desglose por Modalidad de Cobro:
+                              </span>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div className="bg-rose-950/25 border border-rose-500/40 rounded-xl p-3 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-extrabold text-rose-300 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-rose-500" /> Bizum
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">
+                                      {data.bizum.count} {data.bizum.count === 1 ? 'misión' : 'misiones'}
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-1 text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-400">Ingresos:</span>
+                                      <span className="font-extrabold text-rose-300">€{data.bizum.revenueEUR}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-400">Coste Mercs:</span>
+                                      <span className="font-bold text-slate-300">${data.bizum.workerCostUSD}</span>
+                                    </div>
+                                    <div className="pt-1.5 border-t border-rose-500/25 flex items-center justify-between">
+                                      <span className="text-[11px] font-extrabold text-amber-300">Puro Bizum:</span>
+                                      <span className="font-extrabold text-amber-400">€{data.bizum.netProfitEUR.toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="bg-blue-950/25 border border-blue-500/40 rounded-xl p-3 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-extrabold text-blue-300 flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-blue-500" /> PayPal
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                                      {data.paypal.count} {data.paypal.count === 1 ? 'misión' : 'misiones'}
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-1 text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-400">Ingresos:</span>
+                                      <span className="font-extrabold text-blue-300">€{data.paypal.revenueEUR}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-400">Coste Mercs:</span>
+                                      <span className="font-bold text-slate-300">${data.paypal.workerCostUSD}</span>
+                                    </div>
+                                    <div className="pt-1.5 border-t border-blue-500/25 flex items-center justify-between">
+                                      <span className="text-[11px] font-extrabold text-amber-300">Puro PayPal:</span>
+                                      <span className="font-extrabold text-amber-400">€{data.paypal.netProfitEUR.toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                      <div><h3 className="font-extrabold text-white text-base">💳 Liquidación y Pagos a Mercenarios</h3></div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {workers.map(w => {
+                          const workerCompletedPending = missions.filter(m => m.workerId === w.id && m.status === 'Completada' && Number(m.workerPayUSD) > 0);
+                          const pendingUSD = workerCompletedPending.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
+                          const wColor = getWorkerColorMeta(w.color);
+                          return (
+                            <div key={w.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 flex flex-col justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${wColor.gradient} flex items-center justify-center font-bold text-white text-xs shadow`}>{w.name.slice(0, 2).toUpperCase()}</div>
+                                <div><h4 className="font-bold text-white text-sm">{w.name}</h4><p className="text-xs text-slate-400">{workerCompletedPending.length} misiones pendientes</p></div>
+                              </div>
+                              <div className="bg-slate-900 p-3 rounded-lg flex items-center justify-between"><span className="text-xs text-slate-400">Pendiente:</span><span className="text-lg font-extrabold text-emerald-400">${pendingUSD} USD</span></div>
+                              <button onClick={() => handleLiquidateWorker(w.id)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-lg flex items-center justify-center gap-1.5 transition"><CreditCard className="w-4 h-4" /> Pagar y Liquidar (${pendingUSD})</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : creatorTab === 'workers' ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+                      <div>
+                        <h3 className="font-extrabold text-white text-base">Gestión de Mercenarios</h3>
+                        <p className="text-xs text-slate-400">Personaliza el color identificativo de cada mercenario o edita sus datos de acceso.</p>
+                      </div>
+                      <button onClick={() => { setEditingWorker(null); setWorkerForm({ name: '', email: '', specialty: '', color: WORKER_COLOR_OPTIONS[0].id }); setIsWorkerModalOpen(true); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><Plus className="w-4 h-4" /> Nuevo Mercenario</button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {workers.map(w => {
+                        const wColor = getWorkerColorMeta(w.color);
+                        return (
+                          <div key={w.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${wColor.gradient} flex items-center justify-center font-extrabold text-white text-sm shadow-lg`}>
+                                  {w.name.slice(0, 2).toUpperCase()}
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border flex items-center gap-1.5 ${wColor.badgeClass}`}>
+                                  <span className={`w-2 h-2 rounded-full ${wColor.dotClass}`} />
+                                  {wColor.label}
+                                </span>
+                              </div>
+                              <div>
+                                <h4 className="font-extrabold text-white text-base">{w.name}</h4>
+                                <p className="text-xs text-slate-400">{w.specialty || 'Mercenario'}</p>
+                                <p className="text-xs text-amber-300 font-mono break-all bg-amber-500/10 px-2 py-1 rounded inline-block mt-1.5">{w.email || w.pin}</p>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                                <span className="text-[11px] font-bold text-slate-400 block">Cambiar color rápido:</span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {WORKER_COLOR_OPTIONS.map(opt => {
+                                    const isSelected = wColor.id === opt.id;
+                                    return (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => handleQuickWorkerColorChange(w, opt.id)}
+                                        title={opt.label}
+                                        className={`w-6 h-6 rounded-full bg-gradient-to-br ${opt.gradient} transition transform ${
+                                          isSelected ? 'ring-2 ring-white scale-110 shadow-lg' : 'opacity-60 hover:opacity-100 hover:scale-105'
+                                        }`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                              <button onClick={() => { setEditingWorker(w); setWorkerForm({ name: w.name, email: w.email || w.pin, specialty: w.specialty, color: wColor.id }); setIsWorkerModalOpen(true); }} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1"><Edit3 className="w-3.5 h-3.5" /> Editar</button>
+                              <button onClick={() => setWorkerToDelete(w)} className="py-2 px-3 bg-slate-800 hover:bg-rose-600 text-slate-300 text-xs font-bold rounded-lg flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3.5">
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                        <button onClick={() => setStatusFilter('ACTIVE')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'ACTIVE' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'}`}>🔥 Misiones Activas <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'ACTIVE' ? 'bg-indigo-800 text-white' : 'bg-slate-900 text-slate-400'}`}>{creatorMissionCounts.active}</span></button>
+                        <button onClick={() => setStatusFilter('En Progreso')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'En Progreso' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-slate-950 text-amber-300/80 hover:text-amber-300 border border-slate-800'}`}>⚡ En Curso <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'En Progreso' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-amber-300'}`}>{creatorMissionCounts.inProgress}</span></button>
+                        <button onClick={() => setStatusFilter('Pendiente')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'Pendiente' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-950 text-indigo-300/80 hover:text-indigo-300 border border-slate-800'}`}>⏳ Pendientes <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'Pendiente' ? 'bg-indigo-800 text-white' : 'bg-slate-900 text-indigo-300'}`}>{creatorMissionCounts.pending}</span></button>
+                        <button onClick={() => setStatusFilter('Completada')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'Completada' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'bg-slate-950 text-emerald-400/80 hover:text-emerald-300 border border-slate-800'}`}>✅ Registro Completadas <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'Completada' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-emerald-400'}`}>{creatorMissionCounts.completed}</span></button>
+                      </div>
+
+                      <button
+                        onClick={() => setShowAllCreatorPasswords(!showAllCreatorPasswords)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] font-bold text-indigo-400 flex items-center gap-1.5 shrink-0 transition"
+                      >
+                        {showAllCreatorPasswords ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showAllCreatorPasswords ? 'Ocultar contraseñas' : 'Ver todas las contraseñas'}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Buscar por cliente, correo o misión..." className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-bold">{availableMonths.map(m => <option key={m} value={m}>📅 {m}</option>)}</select>
+                        <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-bold">
+                          <option value="ALL">💳 Bizum + PayPal</option>
+                          <option value="Bizum">🔴 Solo Bizum</option>
+                          <option value="PayPal">🔵 Solo PayPal</option>
+                        </select>
+                        <select value={workerFilter} onChange={(e) => setWorkerFilter(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"><option value="ALL">🥷 Todos los mercs</option><option value="unassigned">⚠️ Sin asignar</option>{workers.map(w => (<option key={w.id} value={w.id}>🥷 {w.name}</option>))}</select>
+                        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold"><option value="ALL">🏷️ Todas las etiquetas</option>{tags.map(t => (<option key={t.id} value={t.id}>🏷️ {t.name}</option>))}</select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {creatorFilteredMissions.length > 0 ? (
+                        creatorFilteredMissions.map(m => {
+                          const displayPay = m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD;
+                          const isInProgress = m.status === 'En Progreso';
+                          const isCompleted = m.status === 'Completada';
+                          const addedDateText = formatAddedDate(m.createdAt);
+                          const isPassVisible = visibleCredentials[m.id] !== undefined ? visibleCredentials[m.id] : showAllCreatorPasswords;
+
+                          const assignedWorker = workers.find(w => w.id === m.workerId);
+                          const assignedWorkerColor = assignedWorker ? getWorkerColorMeta(assignedWorker.color) : null;
+
+                          return (
+                            <div key={m.id} className={`bg-slate-950 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-l-4 transition ${isInProgress ? 'border-amber-500/40 border-l-amber-400 bg-amber-950/5' : isCompleted ? 'border-slate-800/90 border-l-emerald-500 opacity-90' : 'border-slate-800 border-l-indigo-500'}`}>
+                              <div className="space-y-2 flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {getStatusBadge(m.status)}
+                                  {getPriorityBadge(m.priority)}
+                                  {renderMissionTags(m)}
+                                  <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">€{m.priceTotalEUR} EUR • Pago: ${displayPay} USD {m.isPaidToWorker ? '(Pagado)' : ''}</span>
+                                  {renderPaymentMethodBadge(m)}
+                                  {assignedWorker && assignedWorkerColor && (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border flex items-center gap-1.5 ${assignedWorkerColor.badgeClass}`}>
+                                      <span className={`w-2 h-2 rounded-full ${assignedWorkerColor.dotClass}`} />
+                                      🥷 {assignedWorker.name}
+                                    </span>
+                                  )}
+                                  {addedDateText && <span className="text-[11px] text-slate-500 font-medium">• {addedDateText}</span>}
+                                </div>
+                                <h3 className="font-extrabold text-white text-base">{m.missionTitle}</h3>
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                                  <span>Cliente: <strong className="text-slate-200">{m.clientName}</strong></span>
+                                  {m.clientContact && <span className="text-slate-400">({m.clientContact})</span>}
+                                  {m.completionNotes && isCompleted && <span className="text-emerald-300/90 bg-emerald-500/10 px-2 py-0.5 rounded">Nota: "{m.completionNotes}"</span>}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                  <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-bold text-indigo-300 flex items-center gap-1">
+                                    <Key className="w-3 h-3" /> {m.loginMethod || 'Kabam ID'}
+                                  </span>
+
+                                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-xs">
+                                    <span className="text-slate-400 text-[11px]">Correo/User:</span>
+                                    <span className="font-mono text-slate-100 select-all break-all">{m.accountUser || 'Sin asignar'}</span>
+                                    {m.accountUser && (
+                                      <button onClick={() => copyToClipboard(m.accountUser, 'Usuario / Correo')} className="ml-1 px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold flex items-center gap-0.5 transition" title="Copiar correo/usuario">
+                                        <Copy className="w-2.5 h-2.5" /> Copiar
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-xs">
+                                    <span className="text-slate-400 text-[11px]">Pass:</span>
+                                    <span className="font-mono text-amber-300 select-all break-all">
+                                      {isPassVisible ? (m.accountPass || 'Sin contraseña') : '••••••••••'}
+                                    </span>
+                                    <button onClick={() => toggleCredentials(m.id)} className="text-slate-400 hover:text-indigo-400 p-0.5" title="Mostrar/Ocultar contraseña">
+                                      {isPassVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                    </button>
+                                    {m.accountPass && (
+                                      <button onClick={() => copyToClipboard(m.accountPass, 'Contraseña')} className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold flex items-center gap-0.5 transition" title="Copiar contraseña">
+                                        <Copy className="w-2.5 h-2.5" /> Copiar
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2.5 shrink-0">
+                                <select
+                                  value={m.status}
+                                  onChange={(e) => handleCreatorQuickStatusChange(m, e.target.value)}
+                                  className={`text-xs font-bold rounded-lg px-2.5 py-2 border ${isInProgress ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' : isCompleted ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : 'bg-indigo-500/10 border-indigo-500/40 text-indigo-300'}`}
+                                >
+                                  <option value="Pendiente" className="bg-slate-900 text-white">⏳ Pendiente</option>
+                                  <option value="En Progreso" className="bg-slate-900 text-white">⚡ En Curso</option>
+                                  <option value="Completada" className="bg-slate-900 text-white">✓ Completada</option>
+                                </select>
+
+                                <div className="relative flex items-center">
+                                  {assignedWorkerColor && (
+                                    <span className={`w-2.5 h-2.5 rounded-full ${assignedWorkerColor.dotClass} absolute left-2.5 pointer-events-none`} />
+                                  )}
+                                  <select
+                                    value={m.workerId}
+                                    onChange={(e) => handleQuickWorkerReassign(m, e.target.value)}
+                                    className={`border text-xs font-extrabold rounded-lg py-2 pr-2.5 transition ${
+                                      assignedWorkerColor
+                                        ? `${assignedWorkerColor.selectClass} pl-7`
+                                        : 'bg-slate-900 border-slate-700 text-slate-300 px-2.5'
+                                    }`}
+                                  >
+                                    <option value="unassigned" className="bg-slate-900 text-slate-300">Sin asignar</option>
+                                    {workers.map(w => <option key={w.id} value={w.id} className="bg-slate-900 text-white">{w.name}</option>)}
+                                  </select>
+                                </div>
+
+                                <button onClick={() => {
+                                  setEditingMission(m);
+                                  setMissionForm({ clientName: m.clientName, clientContact: m.clientContact, missionTitle: m.missionTitle, gameCategory: m.gameCategory, accountUser: m.accountUser, accountPass: m.accountPass, loginMethod: m.loginMethod, instructions: m.instructions, priority: m.priority, workerId: m.workerId, priceTotalEUR: m.priceTotalEUR, workerPayUSD: m.workerPayUSD, paymentMethod: getMissionPaymentMethod(m), tags: getMissionTagIds(m) });
+                                  setIsMissionModalOpen(true);
+                                }} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200"><Edit3 className="w-4 h-4" /></button>
+                                <button onClick={() => setMissionToDelete(m)} className="p-2 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
+                          <CheckCircle2 className="w-10 h-10 text-indigo-400 mx-auto" />
+                          <h4 className="font-bold text-white text-sm">Sin misiones en este filtro</h4>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* MODAL NUEVA / EDITAR MISIÓN (CORREGIDO SCROLL MÓVIL: items-start sm:items-center) */}
+          {isMissionModalOpen && (
+            <div
+              className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain p-3 sm:p-4 flex items-start sm:items-center justify-center"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-2xl space-y-4 my-4 sm:my-8">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="font-extrabold text-white text-base">{editingMission ? 'Editar Misión' : 'Nueva Misión'}</h3>
+                    <p className="text-[11px] text-amber-300 flex items-center gap-1 mt-0.5">
+                      <Sparkles className="w-3 h-3" /> Escribe o elige un cliente habitual para autocompletar su correo y contraseña
+                    </p>
+                  </div>
+                  <button onClick={() => setIsMissionModalOpen(false)} className="text-slate-400 p-1">✕</button>
+                </div>
+                <form onSubmit={handleSaveMission} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="relative">
+                      <label className="block text-xs font-bold text-slate-300 mb-1">Cliente *</label>
+                      <input
+                        type="text"
+                        required
+                        value={missionForm.clientName}
+                        onFocus={() => setShowClientSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowClientSuggestions(false), 180)}
+                        onChange={(e) => {
+                          setMissionForm({ ...missionForm, clientName: e.target.value });
+                          setShowClientSuggestions(true);
+                        }}
+                        placeholder="Ej. Panaeru, LARR-MDRV..."
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                      />
+
+                      {showClientSuggestions && matchingClientSuggestions.length > 0 && (
+                        <div className="absolute z-50 left-0 right-0 mt-1 bg-slate-950 border border-amber-500/40 rounded-xl shadow-2xl max-h-52 overflow-y-auto divide-y divide-slate-800/80">
+                          <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase text-amber-300 bg-amber-500/10 flex items-center justify-between">
+                            <span>⚡ Autocompletar Cliente Habitual</span>
+                            <span>Clic para rellenar</span>
+                          </div>
+                          {matchingClientSuggestions.map((c, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onMouseDown={() => handleSelectKnownClient(c)}
+                              onClick={() => handleSelectKnownClient(c)}
+                              className="w-full px-3 py-2 text-left hover:bg-slate-900 flex items-center justify-between gap-2 transition"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs text-white truncate">{c.clientName}</div>
+                                <div className="text-[10px] text-slate-400 font-mono truncate">
+                                  {c.accountUser || 'Sin correo guardado'}
+                                </div>
+                              </div>
+                              <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold shrink-0">
+                                {c.missionsCount} {c.missionsCount === 1 ? 'vez' : 'veces'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">Contacto</label>
+                      <input type="text" value={missionForm.clientContact} onChange={(e) => setMissionForm({ ...missionForm, clientContact: e.target.value })} placeholder="WhatsApp / Discord / Telegram" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" />
+                    </div>
+                  </div>
+
+                  {!editingMission && knownClientsDatabase.length > 0 && (
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2.5 space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-400" /> Clientes Frecuentes (Toca uno para autorrellenar sus credenciales):
+                      </span>
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                        {knownClientsDatabase.slice(0, 8).map((c, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSelectKnownClient(c)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-amber-500/20 border border-slate-800 hover:border-amber-500/40 text-xs font-bold text-slate-200 hover:text-amber-300 shrink-0 transition flex items-center gap-1"
+                          >
+                            <span>{c.clientName}</span>
+                            <span className="text-[10px] text-slate-500">({c.missionsCount})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1">Título de la Misión *</label><input type="text" required value={missionForm.missionTitle} onChange={(e) => setMissionForm({ ...missionForm, missionTitle: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+                  
+                  <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between"><label className="text-xs font-bold text-amber-300 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Etiquetas</label></div>
+                    {tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {tags.map(t => {
+                          const isSelected = (missionForm.tags || []).includes(t.id);
+                          const colorMeta = getTagColorMeta(t.color);
+                          return (
+                            <button key={t.id} type="button" onClick={() => toggleTagInMissionForm(t.id)} className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition ${isSelected ? `${colorMeta.badgeClass} ring-2 ring-white/40 shadow` : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                              <Tag className="w-3 h-3" />{t.name}{isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="text-[11px] text-slate-400">Sin etiquetas.</p>}
+
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-2 border-t border-slate-800/80">
+                      <input type="text" value={quickTagName} onChange={(e) => setQuickTagName(e.target.value)} placeholder="Crear etiqueta rápida..." className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500" />
+                      <select value={quickTagColor} onChange={(e) => setQuickTagColor(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
+                        {TAG_COLOR_OPTIONS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
+                      <button type="button" onClick={handleQuickCreateTagInModal} className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold shrink-0">+ Añadir</button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><label className="block text-[11px] text-slate-400 mb-1">Método Login</label><input type="text" value={missionForm.loginMethod} onChange={(e) => setMissionForm({ ...missionForm, loginMethod: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" /></div>
+                    <div><label className="block text-[11px] text-slate-400 mb-1">Usuario / Email</label><input type="text" value={missionForm.accountUser} onChange={(e) => setMissionForm({ ...missionForm, accountUser: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" /></div>
+                    <div><label className="block text-[11px] text-slate-400 mb-1">Contraseña</label><input type="text" value={missionForm.accountPass} onChange={(e) => setMissionForm({ ...missionForm, accountPass: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" /></div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-xs font-bold text-slate-300 mb-1">Cobro (€ EUR)</label><input type="number" step="any" value={missionForm.priceTotalEUR} onChange={(e) => setMissionForm({ ...missionForm, priceTotalEUR: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+                    <div><label className="block text-xs font-bold text-slate-300 mb-1">Pago Merc ($ USD)</label><input type="number" step="any" value={missionForm.workerPayUSD} onChange={(e) => setMissionForm({ ...missionForm, workerPayUSD: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">¿Cómo te paga el cliente? *</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setMissionForm({ ...missionForm, paymentMethod: 'Bizum' })}
+                        className={`py-2.5 px-4 rounded-xl border font-extrabold text-xs flex items-center justify-center gap-2 transition ${
+                          missionForm.paymentMethod !== 'PayPal'
+                            ? 'bg-rose-600/25 border-rose-500 text-rose-200 ring-2 ring-rose-500/40 shadow-lg shadow-rose-600/20'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                        }`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                        📱 Bizum (Rojo)
+                        {missionForm.paymentMethod !== 'PayPal' && <Check className="w-3.5 h-3.5 stroke-[3] text-rose-300" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMissionForm({ ...missionForm, paymentMethod: 'PayPal' })}
+                        className={`py-2.5 px-4 rounded-xl border font-extrabold text-xs flex items-center justify-center gap-2 transition ${
+                          missionForm.paymentMethod === 'PayPal'
+                            ? 'bg-blue-600/25 border-blue-500 text-blue-200 ring-2 ring-blue-500/40 shadow-lg shadow-blue-600/20'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                        }`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                        💳 PayPal (Azul)
+                        {missionForm.paymentMethod === 'PayPal' && <Check className="w-3.5 h-3.5 stroke-[3] text-blue-300" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">Asignar a</label>
+                      <select value={missionForm.workerId} onChange={(e) => setMissionForm({ ...missionForm, workerId: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white"><option value="unassigned">Sin asignar</option>{workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">Prioridad</label>
+                      <select value={missionForm.priority} onChange={(e) => setMissionForm({ ...missionForm, priority: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white"><option value="Normal">Normal</option><option value="VIP">VIP</option><option value="Urgente">Urgente</option></select>
+                    </div>
+                  </div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1">Instrucciones</label><textarea rows={2} value={missionForm.instructions} onChange={(e) => setMissionForm({ ...missionForm, instructions: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button type="button" onClick={() => setIsMissionModalOpen(false)} className="px-4 py-2 bg-slate-800 text-xs font-bold rounded-xl text-slate-300">Cancelar</button>
+                    <button type="submit" className="px-5 py-2 bg-indigo-600 text-xs font-bold rounded-xl text-white">Guardar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {isWorkerModalOpen && (
+            <div
+              className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain p-3 sm:p-4 flex items-start sm:items-center justify-center"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 my-4 sm:my-8">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <h3 className="font-extrabold text-white text-base">{editingWorker ? 'Editar Mercenario' : 'Nuevo Mercenario'}</h3>
+                  <button onClick={() => setIsWorkerModalOpen(false)} className="text-slate-400">✕</button>
+                </div>
+                <form onSubmit={handleSaveWorker} className="space-y-4">
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1">Nombre *</label><input type="text" required value={workerForm.name} onChange={(e) => setWorkerForm({ ...workerForm, name: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+                  <div><label className="block text-xs font-bold text-amber-300 mb-1">Correo Registrado en Firebase *</label><input type="email" required value={workerForm.email} onChange={(e) => setWorkerForm({ ...workerForm, email: e.target.value.toLowerCase() })} placeholder="nildead@merc.com" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-amber-300" /></div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1">Especialidad</label><input type="text" value={workerForm.specialty} onChange={(e) => setWorkerForm({ ...workerForm, specialty: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-2">Color Identificativo del Mercenario</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {WORKER_COLOR_OPTIONS.map(opt => {
+                        const isSelected = workerForm.color === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setWorkerForm({ ...workerForm, color: opt.id })}
+                            className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                              isSelected
+                                ? `${opt.badgeClass} ring-2 ring-white/40 shadow`
+                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
+                            }`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded-full bg-gradient-to-br ${opt.gradient} shrink-0`} />
+                            <span className="truncate">{opt.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button type="button" onClick={() => setIsWorkerModalOpen(false)} className="px-4 py-2 bg-slate-800 text-xs font-bold rounded-xl text-slate-300">Cancelar</button>
+                    <button type="submit" className="px-5 py-2 bg-indigo-600 text-xs font-bold rounded-xl text-white">Guardar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {completingMission && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+                <h3 className="font-extrabold text-white text-base">¿Completar misión?</h3>
+                <form onSubmit={handleConfirmCompleteMission} className="space-y-4">
+                  <textarea rows={3} value={completionNoteInput} onChange={(e) => setCompletionNoteInput(e.target.value)} placeholder="Notas de finalización..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white" />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setCompletingMission(null)} className="flex-1 py-2 bg-slate-800 rounded-xl text-xs font-bold text-slate-300">Cancelar</button>
+                    <button type="submit" className="flex-1 py-2 bg-emerald-500 rounded-xl text-xs font-bold text-slate-950">Confirmar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {missionToDelete && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 text-center space-y-4">
+                <h3 className="font-bold text-white text-sm">¿Eliminar misión?</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => setMissionToDelete(null)} className="flex-1 py-2 bg-slate-800 rounded-xl text-xs font-bold text-slate-300">Cancelar</button>
+                  <button onClick={handleDeleteMission} className="flex-1 py-2 bg-rose-600 rounded-xl text-xs font-bold text-white">Eliminar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {workerToDelete && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 text-center space-y-4">
+                <h3 className="font-bold text-white text-sm">¿Eliminar al mercenario {workerToDelete.name}?</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => setWorkerToDelete(null)} className="flex-1 py-2 bg-slate-800 rounded-xl text-xs font-bold text-slate-300">Cancelar</button>
+                  <button onClick={handleDeleteWorker} className="flex-1 py-2 bg-rose-600 rounded-xl text-xs font-bold text-white">Eliminar</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tagToDelete && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 text-center space-y-4">
+                <h3 className="font-bold text-white text-sm">¿Eliminar la etiqueta "{tagToDelete.name}"?</h3>
+                <p className="text-xs text-slate-400">Se quitará de las misiones que la tengan asignada.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setTagToDelete(null)} className="flex-1 py-2 bg-slate-800 rounded-xl text-xs font-bold text-slate-300">Cancelar</button>
+                  <button onClick={handleDeleteTag} className="flex-1 py-2 bg-rose-600 rounded-xl text-xs font-bold text-white">Eliminar</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const createRootInstance = createRoot(document.getElementById('root'));
+    createRootInstance.render(<App />);
+  </script>
+</body>
+</html>
