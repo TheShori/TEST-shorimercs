@@ -44,10 +44,10 @@
     import React, { useState, useEffect, useMemo, useRef } from 'react';
     import { createRoot } from 'react-dom/client';
     import { 
-      Shield, Sword, CheckCircle2, Clock, Plus, Copy, Eye, EyeOff, Play, Check, 
+      Shield, Sword, CheckCircle2, Clock, Plus, Copy, Eye, EyeOff, Play, Pause, Check, 
       Trash2, Edit3, Search, Smartphone, DollarSign, Euro, LogOut, Lock, Crown, 
       Calendar, CreditCard, History, Users, Tag, BarChart3, TrendingUp, ArrowUp, Key, Sparkles,
-      Bell, BellRing, Volume2, VolumeX, CheckCheck, MessageCircle, Activity, Award, Timer
+      Bell, BellRing, Volume2, VolumeX, CheckCheck, MessageCircle, Activity, Award, Timer, ListChecks
     } from 'lucide-react';
 
     import { initializeApp } from "firebase/app";
@@ -89,16 +89,14 @@
         gain.connect(ctx.destination);
 
         if (type === 'completed') {
-          // Doble tono ascendente alegre para misiones completadas
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, now); // D5
-          osc.frequency.setValueAtTime(880, now + 0.12); // A5
+          osc.frequency.setValueAtTime(587.33, now);
+          osc.frequency.setValueAtTime(880, now + 0.12);
           gain.gain.setValueAtTime(0.18, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
           osc.start(now);
           osc.stop(now + 0.42);
         } else if (type === 'removed') {
-          // Tono descendente suave para misión retirada
           osc.type = 'triangle';
           osc.frequency.setValueAtTime(440, now);
           osc.frequency.setValueAtTime(311.13, now + 0.14);
@@ -107,18 +105,15 @@
           osc.start(now);
           osc.stop(now + 0.35);
         } else {
-          // Tono cristalino para nueva asignación o misión puesta en curso
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(523.25, now); // C5
-          osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.1);
           gain.gain.setValueAtTime(0.16, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
           osc.start(now);
           osc.stop(now + 0.35);
         }
-      } catch (e) {
-        // Ignorar si el navegador bloquea el audio antes de interactuar
-      }
+      } catch (e) {}
     };
 
     const isExcludedInternalClient = (name) => {
@@ -144,11 +139,30 @@
 
     const formatDuration = (ms) => {
       if (!ms || ms <= 0) return 'N/D';
-      const mins = Math.floor(ms / 60000);
+      const mins = Math.max(1, Math.floor(ms / 60000));
       const hrs = Math.floor(mins / 60);
       const remMins = mins % 60;
       if (hrs === 0) return `${remMins}m`;
       return `${hrs}h ${remMins}m`;
+    };
+
+    // Calcula el tiempo real de trabajo efectivo descontando el tiempo que la misión estuvo En Pausa
+    const getMissionEffectiveWorkMs = (m, nowTs = Date.now()) => {
+      const baseAccumulated = Number(m.accumulatedWorkMs) || 0;
+      if (m.status === 'En Progreso' && m.lastResumedAt) {
+        return baseAccumulated + Math.max(0, nowTs - Number(m.lastResumedAt));
+      }
+      if (baseAccumulated > 0) {
+        return baseAccumulated;
+      }
+      // Compatibilidad con misiones antiguas que solo tenían startedAt y completedAt
+      if (m.startedAt && m.completedAt && Number(m.completedAt) > Number(m.startedAt)) {
+        return Number(m.completedAt) - Number(m.startedAt);
+      }
+      if (m.status === 'En Progreso' && m.startedAt) {
+        return Math.max(0, nowTs - Number(m.startedAt));
+      }
+      return 0;
     };
 
     const getMissionPaymentMethod = (m) => {
@@ -241,6 +255,7 @@
       const [editingTag, setEditingTag] = useState(null);
       const [quickTagName, setQuickTagName] = useState('');
       const [quickTagColor, setQuickTagColor] = useState('indigo');
+      const [newChecklistItemText, setNewChecklistItemText] = useState('');
 
       const [toastMessage, setToastMessage] = useState(null);
       const [visibleCredentials, setVisibleCredentials] = useState({});
@@ -250,7 +265,7 @@
         clientName: '', clientContact: '', missionTitle: '', gameCategory: 'Exploración de Actos',
         accountUser: '', accountPass: '', loginMethod: 'Kabam ID', instructions: '',
         priority: 'Normal', workerId: 'unassigned', priceTotalEUR: '', workerPayUSD: '',
-        paymentMethod: 'Bizum', tags: []
+        paymentMethod: 'Bizum', tags: [], checklist: []
       });
 
       const [workerForm, setWorkerForm] = useState({
@@ -312,10 +327,8 @@
       const currentIsolatedWorker = workers.find(w => w.email?.toLowerCase() === authUser?.email?.toLowerCase()) || null;
       const isolatedWorkerId = currentIsolatedWorker ? currentIsolatedWorker.id : null;
 
-      // Identificador del destinatario actual para filtrar sus notificaciones
       const currentRecipientKey = isCreatorSession ? 'creator' : (isolatedWorkerId || null);
 
-      // Notificaciones dirigidas al usuario actual (ordenadas de más reciente a más antigua)
       const myNotifications = useMemo(() => {
         if (!currentRecipientKey) return [];
         return notifications
@@ -327,7 +340,6 @@
         return myNotifications.filter(n => !n.read).length;
       }, [myNotifications]);
 
-      // Detectar nuevas notificaciones en tiempo real para disparar alerta sonora y banner superior
       useEffect(() => {
         if (!currentRecipientKey) return;
         if (!initialNotifLoadDoneRef.current) {
@@ -343,7 +355,6 @@
           newlyArrived.forEach(n => knownNotifIdsRef.current.add(n.id));
           const latest = newlyArrived[0];
 
-          // Solo sonar y mostrar alerta si fue creada hace menos de 30 segundos
           if (Date.now() - (Number(latest.createdAt) || 0) < 30000) {
             if (soundEnabled) {
               playNotificationSound(latest.eventType || 'default');
@@ -365,17 +376,16 @@
         }
       }, [myNotifications, currentRecipientKey, soundEnabled, notifications.length]);
 
-      // Función auxiliar para enviar una notificación a Firebase
       const pushCloudNotification = async ({ recipient, title, message, eventType = 'info', missionTitle = '', clientName = '' }) => {
         if (!db || !recipient) return;
         const now = Date.now();
         const notifId = `notif-${now}-${Math.random().toString(36).slice(2, 7)}`;
         const newNotif = {
           id: notifId,
-          recipient, // 'creator' o el worker.id (ej. 'worker-12345')
+          recipient,
           title,
           message,
-          eventType, // 'assigned' | 'removed' | 'started' | 'completed' | 'status_changed' | 'paid'
+          eventType,
           missionTitle,
           clientName,
           read: false,
@@ -432,33 +442,31 @@
         } catch (e) {}
       };
 
-      // MEJORA 6: Estadísticas e histórico de rendimiento por mercenario
+      // Estadísticas de rendimiento por mercenario usando el tiempo efectivo sin contar pausas
       const workerPerformanceStats = useMemo(() => {
         const stats = {};
         workers.forEach(w => {
           const wMissions = missions.filter(m => m.workerId === w.id);
           const completedMissions = wMissions.filter(m => m.status === 'Completada');
           const currentMonthCompleted = completedMissions.filter(m => m.monthYear === monthFilter);
-          const activeQueueCount = wMissions.filter(m => m.status === 'En Progreso' || m.status === 'Pendiente').length;
+          const activeQueueCount = wMissions.filter(m => m.status === 'En Progreso' || m.status === 'En Pausa' || m.status === 'Pendiente').length;
 
-          // Total ganado sumando misiones completadas (actuales o ya liquidadas)
           const missionsEarnedUSD = completedMissions.reduce((acc, m) => {
             const currentPay = Number(m.workerPayUSD) || 0;
             const originalPay = m.originalWorkerPayUSD !== undefined ? Number(m.originalWorkerPayUSD) : currentPay;
             return acc + originalPay;
           }, 0);
 
-          // Por si había pagos previos en paidHistory antes de registrar las misiones individuales
           const paidHistorySumUSD = (w.paidHistory || []).reduce((acc, h) => acc + (Number(h.amountPaidUSD) || 0), 0);
           const pendingCurrentUSD = completedMissions.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
           const historicalEarnedUSD = Math.max(missionsEarnedUSD, paidHistorySumUSD + pendingCurrentUSD);
 
-          // Tiempo medio desde que pulsa "Empezar Misión" hasta "Marcar como Completada"
           let totalDurationMs = 0;
           let timedMissionsCount = 0;
           completedMissions.forEach(m => {
-            if (m.startedAt && m.completedAt && m.completedAt > m.startedAt) {
-              totalDurationMs += (m.completedAt - m.startedAt);
+            const effectiveMs = getMissionEffectiveWorkMs(m);
+            if (effectiveMs > 0) {
+              totalDurationMs += effectiveMs;
               timedMissionsCount += 1;
             }
           });
@@ -497,6 +505,7 @@
       };
 
       const getMissionTagIds = (mission) => Array.isArray(mission.tags) ? mission.tags : (mission.tagId ? [mission.tagId] : []);
+      const getMissionChecklist = (mission) => Array.isArray(mission.checklist) ? mission.checklist : [];
       const getMissionTimestamp = (m) => {
         if (m.createdAt) return Number(m.createdAt);
         if (m.id && m.id.startsWith('mission-')) {
@@ -506,7 +515,6 @@
         return 0;
       };
 
-      // Marca de tiempo exacta de cierre de una misión (completedAt prioritario)
       const getMissionClosedTimestamp = (m) => {
         if (m.completedAt && Number(m.completedAt) > 0) return Number(m.completedAt);
         return getMissionTimestamp(m);
@@ -515,10 +523,10 @@
       const activeWorkerQueue = useMemo(() => {
         if (!isolatedWorkerId) return [];
         return missions
-          .filter(m => m.workerId === isolatedWorkerId && (m.status === 'En Progreso' || m.status === 'Pendiente'))
+          .filter(m => m.workerId === isolatedWorkerId && (m.status === 'En Progreso' || m.status === 'En Pausa' || m.status === 'Pendiente'))
           .sort((a, b) => {
-            if (a.status === 'En Progreso' && b.status !== 'En Progreso') return -1;
-            if (b.status === 'En Progreso' && a.status !== 'En Progreso') return 1;
+            const rankStatus = (st) => st === 'En Progreso' ? 0 : st === 'En Pausa' ? 1 : 2;
+            if (rankStatus(a.status) !== rankStatus(b.status)) return rankStatus(a.status) - rankStatus(b.status);
             const prioA = a.workerPriorityOrder !== undefined ? Number(a.workerPriorityOrder) : 0;
             const prioB = b.workerPriorityOrder !== undefined ? Number(b.workerPriorityOrder) : 0;
             if (prioA !== prioB) return prioA - prioB;
@@ -550,10 +558,11 @@
         });
 
         const inProgress = base.filter(m => m.status === 'En Progreso').length;
+        const paused = base.filter(m => m.status === 'En Pausa').length;
         const pending = base.filter(m => m.status === 'Pendiente').length;
         const completed = base.filter(m => m.status === 'Completada').length;
 
-        return { active: inProgress + pending, inProgress, pending, completed, all: base.length };
+        return { active: inProgress + paused + pending, inProgress, paused, pending, completed, all: base.length };
       }, [missions, monthFilter, tagFilter, workerFilter, paymentFilter, searchQuery]);
 
       const creatorFilteredMissions = useMemo(() => {
@@ -561,7 +570,7 @@
           .filter(m => {
             if (m.monthYear !== monthFilter) return false;
             if (statusFilter === 'ACTIVE') {
-              if (m.status !== 'Pendiente' && m.status !== 'En Progreso') return false;
+              if (m.status !== 'Pendiente' && m.status !== 'En Progreso' && m.status !== 'En Pausa') return false;
             } else if (statusFilter !== 'ALL' && m.status !== statusFilter) return false;
             if (tagFilter !== 'ALL' && !getMissionTagIds(m).includes(tagFilter)) return false;
             if (workerFilter !== 'ALL' && m.workerId !== workerFilter) return false;
@@ -570,7 +579,6 @@
             return true;
           })
           .sort((a, b) => {
-            // En Registro Completadas, ordenar sí o sí por la última que hayan cerrado los mercs (completedAt descendente)
             if (statusFilter === 'Completada' || (a.status === 'Completada' && b.status === 'Completada')) {
               const closeDiff = getMissionClosedTimestamp(b) - getMissionClosedTimestamp(a);
               if (closeDiff !== 0) return closeDiff;
@@ -802,6 +810,71 @@
         return current.includes(tagId) ? { ...prev, tags: current.filter(id => id !== tagId) } : { ...prev, tags: [...current, tagId] };
       });
 
+      // Funciones para gestionar las subtareas (Checklist) al crear o editar misión
+      const handleAddChecklistItemToForm = () => {
+        const clean = newChecklistItemText.trim();
+        if (!clean) return;
+        const newItem = {
+          id: `chk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          text: clean,
+          done: false
+        };
+        setMissionForm(prev => ({
+          ...prev,
+          checklist: [...(Array.isArray(prev.checklist) ? prev.checklist : []), newItem]
+        }));
+        setNewChecklistItemText('');
+      };
+
+      const handleUpdateChecklistItemTextInForm = (itemId, newText) => {
+        setMissionForm(prev => ({
+          ...prev,
+          checklist: (prev.checklist || []).map(item => item.id === itemId ? { ...item, text: newText } : item)
+        }));
+      };
+
+      const handleRemoveChecklistItemFromForm = (itemId) => {
+        setMissionForm(prev => ({
+          ...prev,
+          checklist: (prev.checklist || []).filter(item => item.id !== itemId)
+        }));
+      };
+
+      // Marcar / Desmarcar un paso de la checklist en vivo desde la tarjeta del Mercenario o del Creador
+      const handleToggleMissionChecklistItem = async (mission, itemId) => {
+        if (!db) return;
+        const currentList = getMissionChecklist(mission);
+        let toggledItem = null;
+        const updatedList = currentList.map(item => {
+          if (item.id === itemId) {
+            toggledItem = { ...item, done: !item.done };
+            return toggledItem;
+          }
+          return item;
+        });
+
+        try {
+          await setDoc(doc(db, "missions", mission.id), { checklist: updatedList }, { merge: true });
+          const doneCount = updatedList.filter(i => i.done).length;
+
+          // Si lo marca el mercenario, notificar progreso al Creador
+          if (!isCreatorSession && toggledItem && toggledItem.done) {
+            const workerName = currentIsolatedWorker?.name || 'Mercenario';
+            await pushCloudNotification({
+              recipient: 'creator',
+              title: `☑️ Avance de ${workerName} (${doneCount}/${updatedList.length})`,
+              message: `${workerName} completó el paso "${toggledItem.text}" en "${mission.missionTitle}" (Cliente: ${mission.clientName}).`,
+              eventType: 'started',
+              missionTitle: mission.missionTitle,
+              clientName: mission.clientName
+            });
+          }
+          showToast(`☑️ Progreso actualizado (${doneCount}/${updatedList.length})`);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
       const handleLiquidateWorker = async (workerId) => {
         const worker = workers.find(w => w.id === workerId);
         if (!worker) return;
@@ -819,7 +892,6 @@
           for (const pm of pendingMissionsToPay) {
             await setDoc(doc(db, "missions", pm.id), { originalWorkerPayUSD: pm.workerPayUSD, workerPayUSD: 0, isPaidToWorker: true }, { merge: true });
           }
-          // Notificar al mercenario de su pago liquidado
           await pushCloudNotification({
             recipient: workerId,
             title: '💸 ¡Pago Liquidado!',
@@ -832,10 +904,20 @@
         showToast(`💸 ¡Liquidación de $${amountUSD} efectuada a ${worker.name}!`);
       };
 
-      // Guardar o Editar Misión (Dispara notificaciones si se asigna o quita a un mercenario)
       const handleSaveMission = async (e) => {
         e.preventDefault();
         if (!missionForm.clientName.trim() || !missionForm.missionTitle.trim()) { showToast('⚠️ Faltan datos requeridos'); return; }
+
+        // Si escribió algo en la caja de subtarea pero no pulsó "+ Añadir paso", lo incluimos automáticamente
+        let finalChecklist = Array.isArray(missionForm.checklist) ? [...missionForm.checklist] : [];
+        if (newChecklistItemText.trim()) {
+          finalChecklist.push({
+            id: `chk-${Date.now()}`,
+            text: newChecklistItemText.trim(),
+            done: false
+          });
+          setNewChecklistItemText('');
+        }
 
         const targetMonthYear = editingMission ? (editingMission.monthYear || getCurrentMonthYear()) : getCurrentMonthYear();
         const payload = {
@@ -844,6 +926,7 @@
           workerPayUSD: Number(missionForm.workerPayUSD) || 0,
           paymentMethod: missionForm.paymentMethod === 'PayPal' ? 'PayPal' : 'Bizum',
           tags: Array.isArray(missionForm.tags) ? missionForm.tags : [],
+          checklist: finalChecklist,
           monthYear: targetMonthYear
         };
 
@@ -854,7 +937,6 @@
           if (db) {
             await setDoc(doc(db, "missions", editingMission.id), { ...editingMission, ...payload }, { merge: true });
 
-            // Si cambió el mercenario asignado desde el modal de editar:
             if (prevWorkerId !== nextWorkerId) {
               if (prevWorkerId !== 'unassigned') {
                 await pushCloudNotification({
@@ -882,11 +964,21 @@
         } else {
           const nowTs = Date.now();
           const newId = `mission-${nowTs}`;
-          const newM = { ...payload, id: newId, status: 'Pendiente', orderIndex: missions.length + 1, createdAt: nowTs, startedAt: null, completedAt: null, completionNotes: '' };
+          const newM = {
+            ...payload,
+            id: newId,
+            status: 'Pendiente',
+            orderIndex: missions.length + 1,
+            createdAt: nowTs,
+            startedAt: null,
+            lastResumedAt: null,
+            accumulatedWorkMs: 0,
+            completedAt: null,
+            completionNotes: ''
+          };
           if (db) {
             await setDoc(doc(db, "missions", newId), newM);
 
-            // Si al crear la misión ya va asignada a un mercenario, le notificamos al instante
             if (payload.workerId && payload.workerId !== 'unassigned') {
               await pushCloudNotification({
                 recipient: payload.workerId,
@@ -905,7 +997,6 @@
         setIsMissionModalOpen(false);
       };
 
-      // Cambiar asignación de mercenario desde el selector rápido de la tarjeta
       const handleQuickWorkerReassign = async (mission, newWorkerId) => {
         if (!db) return;
         const oldWorkerId = mission.workerId || 'unassigned';
@@ -949,14 +1040,26 @@
         }
       };
 
-      // Cambiar estado desde el selector rápido del Creador
+      // Cambiar estado desde el selector rápido del Creador (respetando el cálculo de tiempo en pausa)
       const handleCreatorQuickStatusChange = async (mission, newStatus) => {
         if (!db || mission.status === newStatus) return;
+        const now = Date.now();
+        let accumulated = Number(mission.accumulatedWorkMs) || 0;
+        if (mission.status === 'En Progreso') {
+          const startRef = Number(mission.lastResumedAt || mission.startedAt || now);
+          accumulated += Math.max(0, now - startRef);
+        }
+
+        const updatePayload = {
+          status: newStatus,
+          accumulatedWorkMs: accumulated,
+          lastResumedAt: newStatus === 'En Progreso' ? now : null,
+          startedAt: mission.startedAt || (newStatus === 'En Progreso' ? now : null),
+          completedAt: newStatus === 'Completada' ? now : (mission.completedAt || null)
+        };
+
         try {
-          await setDoc(doc(db, "missions", mission.id), {
-            status: newStatus,
-            completedAt: newStatus === 'Completada' ? Date.now() : (mission.completedAt || null)
-          }, { merge: true });
+          await setDoc(doc(db, "missions", mission.id), updatePayload, { merge: true });
 
           if (mission.workerId && mission.workerId !== 'unassigned') {
             await pushCloudNotification({
@@ -986,21 +1089,58 @@
         }
       };
 
-      // Cuando el Mercenario pulsa "Empezar Misión" -> Notifica al Creador
+      // Empezar o Reanudar Misión (activa el cronómetro de trabajo efectivo)
       const handleStartMission = async (mission) => {
+        const now = Date.now();
+        const isResuming = mission.status === 'En Pausa';
         if (db) {
-          await setDoc(doc(db, "missions", mission.id), { status: 'En Progreso', startedAt: Date.now() }, { merge: true });
+          await setDoc(doc(db, "missions", mission.id), {
+            status: 'En Progreso',
+            startedAt: mission.startedAt || now,
+            lastResumedAt: now
+          }, { merge: true });
+
           const workerName = currentIsolatedWorker?.name || 'Un mercenario';
           await pushCloudNotification({
             recipient: 'creator',
-            title: `⚡ ${workerName} empezó una misión`,
-            message: `${workerName} ha puesto EN CURSO "${mission.missionTitle}" del cliente ${mission.clientName}.`,
+            title: isResuming ? `▶️ ${workerName} reanudó la misión` : `⚡ ${workerName} empezó una misión`,
+            message: isResuming
+              ? `${workerName} ha vuelto a entrar a la cuenta de ${mission.clientName} para continuar "${mission.missionTitle}".`
+              : `${workerName} ha puesto EN CURSO "${mission.missionTitle}" del cliente ${mission.clientName}.`,
             eventType: 'started',
             missionTitle: mission.missionTitle,
             clientName: mission.clientName
           });
         }
-        showToast('▶️ Misión puesta En Curso (Creador notificado)');
+        showToast(isResuming ? '▶️ Misión reanudada (Creador notificado)' : '▶️ Misión puesta En Curso (Creador notificado)');
+      };
+
+      // Pausar Misión (detiene el cronómetro de trabajo y avisa al Creador de que el cliente puede entrar)
+      const handlePauseMission = async (mission) => {
+        const now = Date.now();
+        const startRef = Number(mission.lastResumedAt || mission.startedAt || now);
+        const sessionElapsed = Math.max(0, now - startRef);
+        const newAccumulated = (Number(mission.accumulatedWorkMs) || 0) + sessionElapsed;
+
+        if (db) {
+          await setDoc(doc(db, "missions", mission.id), {
+            status: 'En Pausa',
+            accumulatedWorkMs: newAccumulated,
+            lastResumedAt: null,
+            lastPausedAt: now
+          }, { merge: true });
+
+          const workerName = currentIsolatedWorker?.name || 'Un mercenario';
+          await pushCloudNotification({
+            recipient: 'creator',
+            title: `⏸️ Misión Pausada (${mission.clientName} puede entrar)`,
+            message: `${workerName} ha pausado "${mission.missionTitle}". Cuenta libre para el cliente ${mission.clientName}. (Tiempo trabajado: ${formatDuration(newAccumulated)}).`,
+            eventType: 'status_changed',
+            missionTitle: mission.missionTitle,
+            clientName: mission.clientName
+          });
+        }
+        showToast('⏸️ Misión en pausa. Creador avisado de que el cliente puede entrar');
       };
 
       const handlePrioritizeMission = async (mission) => {
@@ -1010,15 +1150,31 @@
         showToast('⬆️ Misión priorizada');
       };
 
-      // Cuando el Mercenario marca como "Completada" -> Notifica al Creador
+      // Cuando el Mercenario marca como "Completada" -> Guarda solo el tiempo efectivo sin pausas
       const handleConfirmCompleteMission = async (e) => {
         e.preventDefault();
         if (!completingMission) return;
+        const now = Date.now();
         const finalNote = completionNoteInput.trim() || 'Completado con éxito.';
+
+        let totalEffectiveMs = Number(completingMission.accumulatedWorkMs) || 0;
+        if (completingMission.status === 'En Progreso') {
+          const startRef = Number(completingMission.lastResumedAt || completingMission.startedAt || now);
+          totalEffectiveMs += Math.max(0, now - startRef);
+        } else if (totalEffectiveMs === 0 && completingMission.startedAt) {
+          totalEffectiveMs = Math.max(0, now - Number(completingMission.startedAt));
+        }
+
+        // Al completar la misión, marcamos todas las subtareas como completadas
+        const updatedChecklist = getMissionChecklist(completingMission).map(item => ({ ...item, done: true }));
+
         if (db) {
           await setDoc(doc(db, "missions", completingMission.id), {
             status: 'Completada',
-            completedAt: Date.now(),
+            completedAt: now,
+            lastResumedAt: null,
+            accumulatedWorkMs: totalEffectiveMs,
+            checklist: updatedChecklist,
             completionNotes: finalNote
           }, { merge: true });
 
@@ -1026,7 +1182,7 @@
           await pushCloudNotification({
             recipient: 'creator',
             title: `✅ ¡${workerName} completó una misión!`,
-            message: `${workerName} ha finalizado "${completingMission.missionTitle}" (Cliente: ${completingMission.clientName}). Nota: "${finalNote}"`,
+            message: `${workerName} ha finalizado "${completingMission.missionTitle}" (Cliente: ${completingMission.clientName} • Tiempo efectivo: ${formatDuration(totalEffectiveMs)}). Nota: "${finalNote}"`,
             eventType: 'completed',
             missionTitle: completingMission.missionTitle,
             clientName: completingMission.clientName
@@ -1037,7 +1193,6 @@
         setCompletionNoteInput('');
       };
 
-      // Si el Creador elimina una misión que estaba activa en la cola de un mercenario -> Le avisa que ya no está
       const handleDeleteMission = async () => {
         if (!missionToDelete) return;
         if (db) {
@@ -1116,6 +1271,7 @@
 
       const getStatusBadge = (status) => {
         if (status === 'En Progreso') return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> ⚡ En Curso</span>;
+        if (status === 'En Pausa') return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">⏸️ En Pausa (Cliente Libre)</span>;
         if (status === 'Completada') return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">✓ Completada</span>;
         return <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1">⏳ Pendiente</span>;
       };
@@ -1155,7 +1311,49 @@
         });
       };
 
-      // Componente del Botón y Panel Desplegable de Notificaciones (para Creador y Mercenario)
+      // Bloque visual de Checklist interactiva para la tarjeta del Mercenario y del Creador
+      const renderMissionChecklistBlock = (mission) => {
+        const list = getMissionChecklist(mission);
+        if (list.length === 0) return null;
+        const doneCount = list.filter(i => i.done).length;
+        const pct = Math.round((doneCount / list.length) * 100);
+
+        return (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-extrabold text-amber-300 flex items-center gap-1.5">
+                <ListChecks className="w-3.5 h-3.5" /> Progreso de Misión ({doneCount}/{list.length})
+              </span>
+              <span className="text-[11px] font-bold text-emerald-400">{pct}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-300" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+              {list.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleToggleMissionChecklistItem(mission, item.id)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-left text-xs font-bold flex items-center gap-2 transition ${
+                    item.done
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 line-through opacity-85'
+                      : 'bg-slate-950 border-slate-800 text-slate-200 hover:border-indigo-500/50'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${
+                    item.done ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-600 bg-slate-900'
+                  }`}>
+                    {item.done && <Check className="w-3 h-3 stroke-[3]" />}
+                  </span>
+                  <span className="truncate">{item.text}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      };
+
       const renderNotificationBell = () => {
         return (
           <div className="relative">
@@ -1222,7 +1420,6 @@
                   </div>
                 </div>
 
-                {/* Botón opcional para activar notificaciones nativas del sistema/móvil */}
                 {browserNotifPermission === 'default' && (
                   <div className="px-3.5 py-2 bg-indigo-950/50 border-b border-indigo-500/30 flex items-center justify-between gap-2">
                     <span className="text-[11px] text-indigo-200">¿Recibir avisos nativos en el móvil/PC?</span>
@@ -1296,15 +1493,22 @@
       const renderWorkerMissionCard = (m, index) => {
         const isFirst = index === 0;
         const isInProgress = m.status === 'En Progreso';
+        const isPaused = m.status === 'En Pausa';
+        const effectiveMs = getMissionEffectiveWorkMs(m);
 
         return (
-          <div key={m.id} className={`bg-slate-900 rounded-2xl p-4 space-y-3 shadow-xl transition ${isInProgress ? 'border-2 border-amber-500/60' : isFirst ? 'border-2 border-indigo-500/50' : 'border border-slate-800'}`}>
+          <div key={m.id} className={`bg-slate-900 rounded-2xl p-4 space-y-3 shadow-xl transition ${isInProgress ? 'border-2 border-amber-500/60' : isPaused ? 'border-2 border-cyan-500/50' : isFirst ? 'border-2 border-indigo-500/50' : 'border border-slate-800'}`}>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={`px-2.5 py-1 rounded text-[11px] font-extrabold uppercase ${isInProgress ? 'bg-amber-500 text-slate-950' : isFirst ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
-                  {isInProgress ? '⚡ En Curso' : isFirst ? '🎯 Siguiente Cuenta' : `⏳ En Cola #${index + 1}`}
+                <span className={`px-2.5 py-1 rounded text-[11px] font-extrabold uppercase ${isInProgress ? 'bg-amber-500 text-slate-950' : isPaused ? 'bg-cyan-500 text-slate-950' : isFirst ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
+                  {isInProgress ? '⚡ En Curso' : isPaused ? '⏸️ En Pausa (Cliente Libre)' : isFirst ? '🎯 Siguiente Cuenta' : `⏳ En Cola #${index + 1}`}
                 </span>
                 {getPriorityBadge(m.priority)}
+                {effectiveMs > 0 && (
+                  <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                    <Timer className="w-3 h-3" /> {formatDuration(effectiveMs)}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -1324,6 +1528,9 @@
               <h3 className="text-base font-extrabold text-white">{m.missionTitle}</h3>
               <p className="text-xs text-slate-300 mt-1">Cliente: <strong className="text-white">{m.clientName}</strong></p>
             </div>
+
+            {/* CHECKLIST INTERACTIVA DE PROGRESO PARA EL MERCENARIO */}
+            {renderMissionChecklistBlock(m)}
 
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-xs text-slate-400">
@@ -1353,8 +1560,24 @@
                 <button onClick={() => handleStartMission(m)} className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 transition">
                   <Play className="w-4 h-4 fill-slate-950" /> Empezar Misión
                 </button>
+              ) : m.status === 'En Pausa' ? (
+                <div className="space-y-2">
+                  <div className="text-center py-2 px-3 text-xs font-bold text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+                    ⏸️ Misión en pausa (El tiempo no corre y el cliente puede entrar)
+                  </div>
+                  <button onClick={() => handleStartMission(m)} className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-amber-500/20">
+                    <Play className="w-4 h-4 fill-slate-950" /> Reanudar Misión
+                  </button>
+                </div>
               ) : (
-                <div className="text-center py-2 text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl">⚡ Misión actualmente en curso...</div>
+                <div className="space-y-2">
+                  <div className="text-center py-2 text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    ⚡ Misión actualmente en curso...
+                  </div>
+                  <button onClick={() => handlePauseMission(m)} className="w-full py-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 transition">
+                    <Pause className="w-4 h-4" /> ⏸️ Pausar Misión (Avisar que Cliente puede entrar)
+                  </button>
+                </div>
               )}
               <button onClick={() => { setCompletingMission(m); setCompletionNoteInput(''); }} className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 transition">
                 <Check className="w-4 h-4 stroke-[3]" /> Marcar como Completada
@@ -1609,7 +1832,8 @@
                     <button onClick={() => setCreatorTab('workers')} className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5"><Users className="w-4 h-4 text-indigo-400" /> Mercs ({workers.length})</button>
                     <button onClick={() => {
                         setEditingMission(null);
-                        setMissionForm({ clientName: '', clientContact: '', missionTitle: '', gameCategory: 'Exploración de Actos', accountUser: '', accountPass: '', loginMethod: 'Kabam ID', instructions: '', priority: 'Normal', workerId: workers[0]?.id || 'unassigned', priceTotalEUR: '90', workerPayUSD: '60', paymentMethod: 'Bizum', tags: [] });
+                        setNewChecklistItemText('');
+                        setMissionForm({ clientName: '', clientContact: '', missionTitle: '', gameCategory: 'Exploración de Actos', accountUser: '', accountPass: '', loginMethod: 'Kabam ID', instructions: '', priority: 'Normal', workerId: workers[0]?.id || 'unassigned', priceTotalEUR: '90', workerPayUSD: '60', paymentMethod: 'Bizum', tags: [], checklist: [] });
                         setIsMissionModalOpen(true);
                       }} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-extrabold text-white shadow-lg shadow-indigo-600/30">
                       + Nueva Misión
@@ -1755,6 +1979,7 @@
                                             type="button"
                                             onClick={() => {
                                               setEditingMission(null);
+                                              setNewChecklistItemText('');
                                               setMissionForm({
                                                 clientName: client.clientName,
                                                 clientContact: client.clientContact || '',
@@ -1769,7 +1994,8 @@
                                                 priceTotalEUR: '90',
                                                 workerPayUSD: '60',
                                                 paymentMethod: client.paymentMethod || 'Bizum',
-                                                tags: []
+                                                tags: [],
+                                                checklist: []
                                               });
                                               setIsMissionModalOpen(true);
                                             }}
@@ -1946,7 +2172,7 @@
                     <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                       <div>
                         <h3 className="font-extrabold text-white text-base">Gestión y Rendimiento de Mercenarios</h3>
-                        <p className="text-xs text-slate-400">Personaliza el color identificativo, consulta sus métricas y edita sus datos de acceso.</p>
+                        <p className="text-xs text-slate-400">Personaliza el color identificativo, consulta sus métricas (sin contar pausas) y edita sus datos.</p>
                       </div>
                       <button onClick={() => { setEditingWorker(null); setWorkerForm({ name: '', email: '', specialty: '', color: WORKER_COLOR_OPTIONS[0].id }); setIsWorkerModalOpen(true); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><Plus className="w-4 h-4" /> Nuevo Mercenario</button>
                     </div>
@@ -1972,7 +2198,6 @@
                                 <p className="text-xs text-amber-300 font-mono break-all bg-amber-500/10 px-2 py-1 rounded inline-block mt-1.5">{w.email || w.pin}</p>
                               </div>
 
-                              {/* MEJORA 6: PANEL DE RENDIMIENTO Y ESTADÍSTICAS DEL MERCENARIO */}
                               <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
                                 <div className="flex items-center justify-between">
                                   <span className="text-slate-400 flex items-center gap-1.5">
@@ -1994,7 +2219,7 @@
                                 </div>
                                 <div className="flex items-center justify-between pt-1.5 border-t border-slate-800">
                                   <span className="text-slate-400 flex items-center gap-1.5">
-                                    <Timer className="w-3.5 h-3.5 text-cyan-400" /> Tiempo medio:
+                                    <Timer className="w-3.5 h-3.5 text-cyan-400" /> Tiempo efectivo medio:
                                   </span>
                                   <span className="font-bold text-cyan-300">{stats.avgCompletionTime}</span>
                                 </div>
@@ -2036,6 +2261,7 @@
                       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                         <button onClick={() => setStatusFilter('ACTIVE')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'ACTIVE' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'}`}>🔥 Misiones Activas <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'ACTIVE' ? 'bg-indigo-800 text-white' : 'bg-slate-900 text-slate-400'}`}>{creatorMissionCounts.active}</span></button>
                         <button onClick={() => setStatusFilter('En Progreso')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'En Progreso' ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'bg-slate-950 text-amber-300/80 hover:text-amber-300 border border-slate-800'}`}>⚡ En Curso <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'En Progreso' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-amber-300'}`}>{creatorMissionCounts.inProgress}</span></button>
+                        <button onClick={() => setStatusFilter('En Pausa')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'En Pausa' ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20' : 'bg-slate-950 text-cyan-300/80 hover:text-cyan-300 border border-slate-800'}`}>⏸️ En Pausa <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'En Pausa' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-cyan-300'}`}>{creatorMissionCounts.paused}</span></button>
                         <button onClick={() => setStatusFilter('Pendiente')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'Pendiente' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-950 text-indigo-300/80 hover:text-indigo-300 border border-slate-800'}`}>⏳ Pendientes <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'Pendiente' ? 'bg-indigo-800 text-white' : 'bg-slate-900 text-indigo-300'}`}>{creatorMissionCounts.pending}</span></button>
                         <button onClick={() => setStatusFilter('Completada')} className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 shrink-0 ${statusFilter === 'Completada' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'bg-slate-950 text-emerald-400/80 hover:text-emerald-300 border border-slate-800'}`}>✅ Registro Completadas <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${statusFilter === 'Completada' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-emerald-400'}`}>{creatorMissionCounts.completed}</span></button>
                       </div>
@@ -2071,16 +2297,18 @@
                         creatorFilteredMissions.map(m => {
                           const displayPay = m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD;
                           const isInProgress = m.status === 'En Progreso';
+                          const isPaused = m.status === 'En Pausa';
                           const isCompleted = m.status === 'Completada';
                           const addedDateText = formatAddedDate(m.createdAt);
                           const closedDateText = isCompleted ? formatAddedDate(m.completedAt || m.createdAt) : '';
+                          const effectiveMs = getMissionEffectiveWorkMs(m);
                           const isPassVisible = visibleCredentials[m.id] !== undefined ? visibleCredentials[m.id] : showAllCreatorPasswords;
 
                           const assignedWorker = workers.find(w => w.id === m.workerId);
                           const assignedWorkerColor = assignedWorker ? getWorkerColorMeta(assignedWorker.color) : null;
 
                           return (
-                            <div key={m.id} className={`bg-slate-950 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-l-4 transition ${isInProgress ? 'border-amber-500/40 border-l-amber-400 bg-amber-950/5' : isCompleted ? 'border-slate-800/90 border-l-emerald-500 opacity-90' : 'border-slate-800 border-l-indigo-500'}`}>
+                            <div key={m.id} className={`bg-slate-950 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-l-4 transition ${isInProgress ? 'border-amber-500/40 border-l-amber-400 bg-amber-950/5' : isPaused ? 'border-cyan-500/40 border-l-cyan-400 bg-cyan-950/5' : isCompleted ? 'border-slate-800/90 border-l-emerald-500 opacity-90' : 'border-slate-800 border-l-indigo-500'}`}>
                               <div className="space-y-2 flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   {getStatusBadge(m.status)}
@@ -2092,6 +2320,11 @@
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border flex items-center gap-1.5 ${assignedWorkerColor.badgeClass}`}>
                                       <span className={`w-2 h-2 rounded-full ${assignedWorkerColor.dotClass}`} />
                                       🥷 {assignedWorker.name}
+                                    </span>
+                                  )}
+                                  {effectiveMs > 0 && (
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                                      <Timer className="w-3 h-3" /> Tiempo real: {formatDuration(effectiveMs)}
                                     </span>
                                   )}
                                   {isCompleted && closedDateText ? (
@@ -2106,6 +2339,9 @@
                                   {m.clientContact && <span className="text-slate-400">({m.clientContact})</span>}
                                   {m.completionNotes && isCompleted && <span className="text-emerald-300/90 bg-emerald-500/10 px-2 py-0.5 rounded">Nota: "{m.completionNotes}"</span>}
                                 </div>
+
+                                {/* CHECKLIST EN VIVO TAMBIÉN VISIBLE Y EDITABLE DESDE EL PANEL DEL CREADOR */}
+                                {renderMissionChecklistBlock(m)}
 
                                 <div className="flex flex-wrap items-center gap-2 pt-1">
                                   <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-bold text-indigo-300 flex items-center gap-1">
@@ -2140,7 +2376,20 @@
                               </div>
 
                               <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-                                {/* MEJORA 5: BOTÓN DE COPIAR AVISO WHATSAPP EN 1 CLIC */}
+                                {isPaused && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const pauseMsg = `¡Hola ${m.clientName}! ⏸️ Nuestro mercenario ha pausado temporalmente la misión (${m.missionTitle}). Tienes la cuenta 100% libre para entrar a jugar cuando quieras. ¡Avísanos cuando salgas para continuar!`;
+                                      copyToClipboard(pauseMsg, 'Aviso de Cuenta Libre');
+                                    }}
+                                    className="px-3 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition shadow-lg shadow-cyan-500/20"
+                                    title="Copiar mensaje para avisar al cliente de que puede entrar a su cuenta"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 fill-slate-950" /> 💬 Avisar Cuenta Libre
+                                  </button>
+                                )}
+
                                 {isCompleted && (
                                   <button
                                     type="button"
@@ -2158,10 +2407,11 @@
                                 <select
                                   value={m.status}
                                   onChange={(e) => handleCreatorQuickStatusChange(m, e.target.value)}
-                                  className={`text-xs font-bold rounded-lg px-2.5 py-2 border ${isInProgress ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' : isCompleted ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : 'bg-indigo-500/10 border-indigo-500/40 text-indigo-300'}`}
+                                  className={`text-xs font-bold rounded-lg px-2.5 py-2 border ${isInProgress ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' : isPaused ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-300' : isCompleted ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : 'bg-indigo-500/10 border-indigo-500/40 text-indigo-300'}`}
                                 >
                                   <option value="Pendiente" className="bg-slate-900 text-white">⏳ Pendiente</option>
                                   <option value="En Progreso" className="bg-slate-900 text-white">⚡ En Curso</option>
+                                  <option value="En Pausa" className="bg-slate-900 text-white">⏸️ En Pausa</option>
                                   <option value="Completada" className="bg-slate-900 text-white">✓ Completada</option>
                                 </select>
 
@@ -2185,7 +2435,8 @@
 
                                 <button onClick={() => {
                                   setEditingMission(m);
-                                  setMissionForm({ clientName: m.clientName, clientContact: m.clientContact, missionTitle: m.missionTitle, gameCategory: m.gameCategory, accountUser: m.accountUser, accountPass: m.accountPass, loginMethod: m.loginMethod, instructions: m.instructions, priority: m.priority, workerId: m.workerId, priceTotalEUR: m.priceTotalEUR, workerPayUSD: m.workerPayUSD, paymentMethod: getMissionPaymentMethod(m), tags: getMissionTagIds(m) });
+                                  setNewChecklistItemText('');
+                                  setMissionForm({ clientName: m.clientName, clientContact: m.clientContact, missionTitle: m.missionTitle, gameCategory: m.gameCategory, accountUser: m.accountUser, accountPass: m.accountPass, loginMethod: m.loginMethod, instructions: m.instructions, priority: m.priority, workerId: m.workerId, priceTotalEUR: m.priceTotalEUR, workerPayUSD: m.workerPayUSD, paymentMethod: getMissionPaymentMethod(m), tags: getMissionTagIds(m), checklist: getMissionChecklist(m) });
                                   setIsMissionModalOpen(true);
                                 }} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200"><Edit3 className="w-4 h-4" /></button>
                                 <button onClick={() => setMissionToDelete(m)} className="p-2 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300"><Trash2 className="w-4 h-4" /></button>
@@ -2206,7 +2457,7 @@
             )}
           </main>
 
-          {/* MODAL NUEVA / EDITAR MISIÓN (CORREGIDO SCROLL MÓVIL: items-start sm:items-center) */}
+          {/* MODAL NUEVA / EDITAR MISIÓN CON CONFIGURADOR DE CHECKLIST EDITABLE */}
           {isMissionModalOpen && (
             <div
               className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm overflow-y-auto overscroll-contain p-3 sm:p-4 flex items-start sm:items-center justify-center"
@@ -2296,6 +2547,65 @@
                   )}
 
                   <div><label className="block text-xs font-bold text-slate-300 mb-1">Título de la Misión *</label><input type="text" required value={missionForm.missionTitle} onChange={(e) => setMissionForm({ ...missionForm, missionTitle: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
+
+                  {/* BLOQUE NUEVO: CHECKLIST EDITABLE Y CONFIGURABLE DE SUBTAREAS */}
+                  <div className="bg-slate-950/90 border border-indigo-500/30 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-extrabold text-indigo-300 flex items-center gap-1.5">
+                        <ListChecks className="w-4 h-4 text-indigo-400" /> Checklist de Progreso (Subtareas para el Merc)
+                      </label>
+                      <span className="text-[10px] text-slate-400">{(missionForm.checklist || []).length} pasos</span>
+                    </div>
+
+                    {(missionForm.checklist || []).length > 0 ? (
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        {(missionForm.checklist || []).map((item, idx) => (
+                          <div key={item.id} className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                            <span className="text-[10px] font-bold text-slate-500">#{idx + 1}</span>
+                            <input
+                              type="text"
+                              value={item.text}
+                              onChange={(e) => handleUpdateChecklistItemTextInForm(item.id, e.target.value)}
+                              className="flex-1 bg-transparent text-xs text-white focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveChecklistItemFromForm(item.id)}
+                              className="text-slate-500 hover:text-rose-400 p-1"
+                              title="Eliminar paso"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">Opcional: divide misiones largas (ej. "Camino 1", "Camino 2", "Jefe Final") para que el mercenario vaya marcando su avance.</p>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newChecklistItemText}
+                        onChange={(e) => setNewChecklistItemText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddChecklistItemToForm();
+                          }
+                        }}
+                        placeholder="Ej. Camino 1 Necrópolis / Acto 9.1..."
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddChecklistItemToForm}
+                        className="px-3 py-1.5 bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-extrabold shrink-0"
+                      >
+                        + Añadir paso
+                      </button>
+                    </div>
+                  </div>
                   
                   <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-3">
                     <div className="flex items-center justify-between"><label className="text-xs font-bold text-amber-300 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Etiquetas</label></div>
