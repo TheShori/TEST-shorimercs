@@ -47,7 +47,7 @@
       Shield, Sword, CheckCircle2, Clock, Plus, Copy, Eye, EyeOff, Play, Check, 
       Trash2, Edit3, Search, Smartphone, DollarSign, Euro, LogOut, Lock, Crown, 
       Calendar, CreditCard, History, Users, Tag, BarChart3, TrendingUp, ArrowUp, Key, Sparkles,
-      Bell, BellRing, Volume2, VolumeX, CheckCheck
+      Bell, BellRing, Volume2, VolumeX, CheckCheck, MessageCircle, Activity, Award, Timer
     } from 'lucide-react';
 
     import { initializeApp } from "firebase/app";
@@ -140,6 +140,15 @@
     const formatAddedDate = (ts) => {
       if (!ts) return '';
       try { return new Date(Number(ts)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+    };
+
+    const formatDuration = (ms) => {
+      if (!ms || ms <= 0) return 'N/D';
+      const mins = Math.floor(ms / 60000);
+      const hrs = Math.floor(mins / 60);
+      const remMins = mins % 60;
+      if (hrs === 0) return `${remMins}m`;
+      return `${hrs}h ${remMins}m`;
     };
 
     const getMissionPaymentMethod = (m) => {
@@ -422,6 +431,48 @@
           }
         } catch (e) {}
       };
+
+      // MEJORA 6: Estadísticas e histórico de rendimiento por mercenario
+      const workerPerformanceStats = useMemo(() => {
+        const stats = {};
+        workers.forEach(w => {
+          const wMissions = missions.filter(m => m.workerId === w.id);
+          const completedMissions = wMissions.filter(m => m.status === 'Completada');
+          const currentMonthCompleted = completedMissions.filter(m => m.monthYear === monthFilter);
+          const activeQueueCount = wMissions.filter(m => m.status === 'En Progreso' || m.status === 'Pendiente').length;
+
+          // Total ganado sumando misiones completadas (actuales o ya liquidadas)
+          const missionsEarnedUSD = completedMissions.reduce((acc, m) => {
+            const currentPay = Number(m.workerPayUSD) || 0;
+            const originalPay = m.originalWorkerPayUSD !== undefined ? Number(m.originalWorkerPayUSD) : currentPay;
+            return acc + originalPay;
+          }, 0);
+
+          // Por si había pagos previos en paidHistory antes de registrar las misiones individuales
+          const paidHistorySumUSD = (w.paidHistory || []).reduce((acc, h) => acc + (Number(h.amountPaidUSD) || 0), 0);
+          const pendingCurrentUSD = completedMissions.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
+          const historicalEarnedUSD = Math.max(missionsEarnedUSD, paidHistorySumUSD + pendingCurrentUSD);
+
+          // Tiempo medio desde que pulsa "Empezar Misión" hasta "Marcar como Completada"
+          let totalDurationMs = 0;
+          let timedMissionsCount = 0;
+          completedMissions.forEach(m => {
+            if (m.startedAt && m.completedAt && m.completedAt > m.startedAt) {
+              totalDurationMs += (m.completedAt - m.startedAt);
+              timedMissionsCount += 1;
+            }
+          });
+          const avgDurationMs = timedMissionsCount > 0 ? Math.round(totalDurationMs / timedMissionsCount) : 0;
+
+          stats[w.id] = {
+            completedThisMonth: currentMonthCompleted.length,
+            activeQueue: activeQueueCount,
+            totalHistoricalUSD: historicalEarnedUSD,
+            avgCompletionTime: formatDuration(avgDurationMs)
+          };
+        });
+        return stats;
+      }, [workers, missions, monthFilter]);
 
       const handleLogin = async (e) => {
         e.preventDefault();
@@ -1881,14 +1932,15 @@
                   <div className="space-y-4">
                     <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl">
                       <div>
-                        <h3 className="font-extrabold text-white text-base">Gestión de Mercenarios</h3>
-                        <p className="text-xs text-slate-400">Personaliza el color identificativo de cada mercenario o edita sus datos de acceso.</p>
+                        <h3 className="font-extrabold text-white text-base">Gestión y Rendimiento de Mercenarios</h3>
+                        <p className="text-xs text-slate-400">Personaliza el color identificativo, consulta sus métricas y edita sus datos de acceso.</p>
                       </div>
                       <button onClick={() => { setEditingWorker(null); setWorkerForm({ name: '', email: '', specialty: '', color: WORKER_COLOR_OPTIONS[0].id }); setIsWorkerModalOpen(true); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><Plus className="w-4 h-4" /> Nuevo Mercenario</button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {workers.map(w => {
                         const wColor = getWorkerColorMeta(w.color);
+                        const stats = workerPerformanceStats[w.id] || { completedThisMonth: 0, activeQueue: 0, totalHistoricalUSD: 0, avgCompletionTime: 'N/D' };
                         return (
                           <div key={w.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
                             <div className="space-y-3">
@@ -1905,6 +1957,34 @@
                                 <h4 className="font-extrabold text-white text-base">{w.name}</h4>
                                 <p className="text-xs text-slate-400">{w.specialty || 'Mercenario'}</p>
                                 <p className="text-xs text-amber-300 font-mono break-all bg-amber-500/10 px-2 py-1 rounded inline-block mt-1.5">{w.email || w.pin}</p>
+                              </div>
+
+                              {/* MEJORA 6: PANEL DE RENDIMIENTO Y ESTADÍSTICAS DEL MERCENARIO */}
+                              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 flex items-center gap-1.5">
+                                    <Award className="w-3.5 h-3.5 text-emerald-400" /> Comp. ({monthFilter}):
+                                  </span>
+                                  <span className="font-extrabold text-emerald-400">{stats.completedThisMonth} misiones</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 flex items-center gap-1.5">
+                                    <Activity className="w-3.5 h-3.5 text-indigo-400" /> En cola ahora:
+                                  </span>
+                                  <span className="font-bold text-white">{stats.activeQueue} cuentas</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 flex items-center gap-1.5">
+                                    <DollarSign className="w-3.5 h-3.5 text-amber-400" /> Total histórico:
+                                  </span>
+                                  <span className="font-extrabold text-amber-300">${stats.totalHistoricalUSD} USD</span>
+                                </div>
+                                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800">
+                                  <span className="text-slate-400 flex items-center gap-1.5">
+                                    <Timer className="w-3.5 h-3.5 text-cyan-400" /> Tiempo medio:
+                                  </span>
+                                  <span className="font-bold text-cyan-300">{stats.avgCompletionTime}</span>
+                                </div>
                               </div>
 
                               <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
@@ -2041,7 +2121,22 @@
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2.5 shrink-0">
+                              <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                                {/* MEJORA 5: BOTÓN DE COPIAR AVISO WHATSAPP EN 1 CLIC */}
+                                {isCompleted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const whatsappMsg = `¡Hola ${m.clientName}! 🚀 Tu misión ${m.missionTitle} ya está 100% completada. Ya puedes entrar a tu cuenta con total normalidad. ¡Muchas gracias por la confianza!`;
+                                      copyToClipboard(whatsappMsg, 'Aviso de WhatsApp para el cliente');
+                                    }}
+                                    className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/20"
+                                    title="Copiar mensaje listo para pegar en el WhatsApp del cliente"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 fill-slate-950" /> 💬 Copiar Aviso Cliente
+                                  </button>
+                                )}
+
                                 <select
                                   value={m.status}
                                   onChange={(e) => handleCreatorQuickStatusChange(m, e.target.value)}
