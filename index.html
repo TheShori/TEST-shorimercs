@@ -375,6 +375,12 @@ function App() {
           setTags(cloudTags);
         });
 
+        const unsubTemplates = onSnapshot(collection(db, "mission_templates"), (snapshot) => {
+          const cloudTemplates = [];
+          snapshot.forEach((docSnap) => cloudTemplates.push({ id: docSnap.id, ...docSnap.data() }));
+          setTemplates(cloudTemplates);
+        });
+
         const unsubNotifications = onSnapshot(collection(db, "notifications"), (snapshot) => {
           const cloudNotifs = [];
           snapshot.forEach((docSnap) => cloudNotifs.push({ id: docSnap.id, ...docSnap.data() }));
@@ -390,6 +396,7 @@ function App() {
         return () => {
           unsubWorkers();
           unsubTags();
+          unsubTemplates();
           unsubNotifications();
           unsubSettings();
         };
