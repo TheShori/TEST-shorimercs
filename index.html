@@ -244,6 +244,29 @@
       }
     };
 
+
+    const getCountryInfoFromPhone = (phoneStr) => {
+      if (!phoneStr) return { name: 'Desconocido', flag: '🏳️' };
+      const clean = String(phoneStr).replace(/[^\d]/g, '');
+      if (clean.startsWith('34')) return { name: 'España', flag: '🇪🇸' };
+      if (clean.startsWith('52')) return { name: 'México', flag: '🇲🇽' };
+      if (clean.startsWith('54')) return { name: 'Argentina', flag: '🇦🇷' };
+      if (clean.startsWith('57')) return { name: 'Colombia', flag: '🇨🇴' };
+      if (clean.startsWith('51')) return { name: 'Perú', flag: '🇵🇪' };
+      if (clean.startsWith('56')) return { name: 'Chile', flag: '🇨🇱' };
+      if (clean.startsWith('58')) return { name: 'Venezuela', flag: '🇻🇪' };
+      if (clean.startsWith('1')) return { name: 'Estados Unidos / Canadá', flag: '🇺🇸' };
+      if (clean.startsWith('33')) return { name: 'Francia', flag: '🇫🇷' };
+      if (clean.startsWith('44')) return { name: 'Reino Unido', flag: '🇬🇧' };
+      if (clean.startsWith('49')) return { name: 'Alemania', flag: '🇩🇪' };
+      if (clean.startsWith('39')) return { name: 'Italia', flag: '🇮🇹' };
+      if (clean.startsWith('55')) return { name: 'Brasil', flag: '🇧🇷' };
+      if (clean.startsWith('593')) return { name: 'Ecuador', flag: '🇪🇨' };
+      if (clean.startsWith('598')) return { name: 'Uruguay', flag: '🇺🇾' };
+      if (clean.startsWith('503')) return { name: 'El Salvador', flag: '🇸🇻' };
+      return { name: 'Internacional', flag: '🌐' };
+    };
+
 function App() {
       const systemCurrentMonth = useMemo(() => getCurrentMonthYear(), []);
 
@@ -916,7 +939,61 @@ function App() {
         showToast(`⚡ Datos y WhatsApp de ${clientData.clientName} autocompletados`);
       };
 
-      const clientAnalytics = useMemo(() => {
+      
+      const countryAnalytics = useMemo(() => {
+        const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
+        const totalMissionsInPeriod = filteredMissions.length;
+        const map = new Map();
+
+        filteredMissions.forEach(m => {
+          const rawName = (m.clientName || '').trim();
+          if (!rawName || isExcludedInternalClient(rawName)) return;
+          const phoneVal = m.clientPhone || m.clientContact || '';
+          const cInfo = getCountryInfoFromPhone(phoneVal);
+          const key = cInfo.name;
+
+          const rev = Number(m.priceTotalEUR) || 0;
+          const costUSD = Number(m.originalWorkerPayUSD !== undefined ? m.originalWorkerPayUSD : m.workerPayUSD) || 0;
+
+          if (!map.has(key)) {
+            map.set(key, {
+              countryName: cInfo.name,
+              flag: cInfo.flag,
+              count: 0,
+              revenueEUR: 0,
+              workerCostUSD: 0
+            });
+          }
+
+          const item = map.get(key);
+          item.count += 1;
+          item.revenueEUR += rev;
+          item.workerCostUSD += costUSD;
+        });
+
+        const statsList = Array.from(map.values()).map(item => {
+          const workerCostEUR = item.workerCostUSD * 0.92;
+          const netProfitEUR = item.revenueEUR - workerCostEUR;
+          const percentage = totalMissionsInPeriod > 0 ? Math.round((item.count / totalMissionsInPeriod) * 100) : 0;
+          return {
+            ...item,
+            workerCostEUR,
+            netProfitEUR,
+            percentage
+          };
+        });
+
+        statsList.sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return b.revenueEUR - a.revenueEUR;
+        });
+
+        const maxCount = statsList.length > 0 ? Math.max(...statsList.map(s => s.count), 1) : 1;
+
+        return { statsList, maxCount, totalCountries: statsList.length };
+      }, [missions, tagStatsPeriod]);
+
+const clientAnalytics = useMemo(() => {
         const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
         const totalMissionsInPeriod = filteredMissions.length;
         const map = new Map();
@@ -2301,6 +2378,53 @@ function App() {
                           </div>
                         )}
                       </div>
+
+
+                      {/* BLOQUE 3: RANKING DE PAÍSES POR TELÉFONO */}
+                      <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                          <div>
+                            <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                              🌍 Ranking de Países de Clientes ({countryAnalytics.totalCountries})
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Detectado automáticamente por el prefijo telefónico del cliente.
+                            </p>
+                          </div>
+                        </div>
+
+                        {countryAnalytics.statsList.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {countryAnalytics.statsList.map((c, idx) => {
+                              const barWidth = c.count > 0 ? Math.max(Math.round((c.count / countryAnalytics.maxCount) * 100), 10) : 5;
+                              return (
+                                <div key={c.countryName} className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-2xl">{c.flag}</span>
+                                      <div>
+                                        <div className="font-extrabold text-white text-sm">{c.countryName}</div>
+                                        <div className="text-[11px] text-indigo-300 font-bold">{c.count} {c.count === 1 ? 'misión' : 'misiones'} ({c.percentage}%)</div>
+                                      </div>
+                                    </div>
+                                    <span className="text-xs font-extrabold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
+                                      €{c.revenueEUR}
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full" style={{ width: `${barWidth}%` }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-400">
+                            Aún no hay datos de teléfonos de clientes en este periodo.
+                          </div>
+                        )}
+                      </div>
+
                     </div>
                   </div>
                 ) : creatorTab === 'tags' ? (
