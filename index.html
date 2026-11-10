@@ -48,7 +48,7 @@
       Trash2, Edit3, Search, Smartphone, DollarSign, Euro, LogOut, Lock, Crown, 
       Calendar, CreditCard, History, Users, Tag, BarChart3, TrendingUp, ArrowUp, Key, Sparkles,
       Bell, BellRing, Volume2, VolumeX, CheckCheck, MessageCircle, Activity, Award, Timer, ListChecks,
-      Bot, Send, Phone, BookmarkPlus, Bookmark
+      Bot, Send, Phone
     } from 'lucide-react';
 
     import { initializeApp } from "firebase/app";
@@ -76,10 +76,12 @@
 
     const ADMIN_EMAIL = 'victorsoripar@gmail.com';
 
+    // Limpia el teléfono para la API Oficial de Meta (solo dígitos con prefijo de país, ej: 34600112233)
     const sanitizePhoneForMeta = (rawPhone) => {
       if (!rawPhone) return '';
       let digits = String(rawPhone).replace(/[^\d]/g, '');
       if (digits.startsWith('00')) digits = digits.slice(2);
+      // Si pone un móvil español de 9 dígitos (6... o 7...) sin prefijo, le añade 34 automáticamente
       if (digits.length === 9 && (digits.startsWith('6') || digits.startsWith('7'))) {
         digits = '34' + digits;
       }
@@ -91,6 +93,7 @@
       return clean ? `+${clean}` : (rawPhone || '');
     };
 
+    // Sintetizador de sonido para notificaciones en tiempo real (sin archivos externos)
     const playNotificationSound = (type = 'default') => {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -217,6 +220,8 @@
       return WORKER_COLOR_OPTIONS[0];
     };
 
+    
+    // Cifrado de extremo a extremo para contraseñas de clientes
     const SECRET_CRYPTO_KEY = "GestionMercenariosSecureKey2026!_";
 
     const encryptPassword = (plainText) => {
@@ -238,6 +243,7 @@
         return cipherText;
       }
     };
+
 
     const getCountryInfoFromPhone = (phoneStr) => {
       if (!phoneStr) return { name: 'Desconocido', flag: '❓' };
@@ -261,15 +267,15 @@
       return { name: 'Internacional', flag: 'INT' };
     };
 
-    function App() {
+function App() {
       const systemCurrentMonth = useMemo(() => getCurrentMonthYear(), []);
 
       const [workers, setWorkers] = useState([]);
       const [missions, setMissions] = useState([]);
       const [tags, setTags] = useState([]);
-      const [templates, setTemplates] = useState([]); // Plantillas de Misiones Frecuentes
       const [notifications, setNotifications] = useState([]);
       
+      // Configuración de Automatización Fantasma (Make.com + Meta WhatsApp Cloud API)
       const [automationSettings, setAutomationSettings] = useState({
         makeWebhookUrl: '',
         enabled: true,
@@ -320,6 +326,9 @@
       const [showClientSuggestions, setShowClientSuggestions] = useState(false);
 
       const [tagForm, setTagForm] = useState({ name: '', color: 'indigo' });
+      const [templateForm, setTemplateForm] = useState({ name: '', missionTitle: '', gameCategory: 'Exploración de Actos', loginMethod: 'Kabam ID', instructions: '', priceTotalEUR: '90', workerPayUSD: '60', paymentMethod: 'Bizum', tags: [], checklist: [] });
+      const [editingTemplate, setEditingTemplate] = useState(null);
+      const [newTplCheckItem, setNewTplCheckItem] = useState('');
       const [editingTag, setEditingTag] = useState(null);
       const [quickTagName, setQuickTagName] = useState('');
       const [quickTagColor, setQuickTagColor] = useState('indigo');
@@ -366,12 +375,6 @@
           setTags(cloudTags);
         });
 
-        const unsubTemplates = onSnapshot(collection(db, "mission_templates"), (snapshot) => {
-          const cloudTemplates = [];
-          snapshot.forEach((docSnap) => cloudTemplates.push({ id: docSnap.id, ...docSnap.data() }));
-          setTemplates(cloudTemplates);
-        });
-
         const unsubNotifications = onSnapshot(collection(db, "notifications"), (snapshot) => {
           const cloudNotifs = [];
           snapshot.forEach((docSnap) => cloudNotifs.push({ id: docSnap.id, ...docSnap.data() }));
@@ -387,7 +390,6 @@
         return () => {
           unsubWorkers();
           unsubTags();
-          unsubTemplates();
           unsubNotifications();
           unsubSettings();
         };
@@ -421,75 +423,13 @@
         setTimeout(() => setToastMessage(null), 3500);
       };
 
-      // Guardar la misión actual como Plantilla Frecuente
-      const handleSaveAsTemplate = async () => {
-        if (!missionForm.missionTitle.trim()) {
-          showToast('⚠️ Pon un título a la misión para guardarla como plantilla');
-          return;
-        }
-        const templateId = `tpl-${Date.now()}`;
-        const templateData = {
-          id: templateId,
-          name: missionForm.missionTitle.trim(),
-          missionTitle: missionForm.missionTitle,
-          gameCategory: missionForm.gameCategory,
-          loginMethod: missionForm.loginMethod,
-          instructions: missionForm.instructions,
-          priceTotalEUR: missionForm.priceTotalEUR,
-          workerPayUSD: missionForm.workerPayUSD,
-          paymentMethod: missionForm.paymentMethod,
-          tags: missionForm.tags || [],
-          checklist: missionForm.checklist || [],
-          createdAt: Date.now()
-        };
-
-        if (db) {
-          try {
-            await setDoc(doc(db, "mission_templates", templateId), templateData);
-            showToast(`⭐ Plantilla "${templateData.name}" guardada con éxito`);
-          } catch (err) {
-            console.error(err);
-            showToast('⚠️ Error al guardar la plantilla');
-          }
-        }
-      };
-
-      // Cargar una Plantilla Frecuente en el formulario de Misión
-      const handleSelectTemplate = (e) => {
-        const tId = e.target.value;
-        if (!tId) return;
-        const selectedTpl = templates.find(t => t.id === tId);
-        if (!selectedTpl) return;
-
-        setMissionForm(prev => ({
-          ...prev,
-          missionTitle: selectedTpl.missionTitle || prev.missionTitle,
-          gameCategory: selectedTpl.gameCategory || prev.gameCategory,
-          loginMethod: selectedTpl.loginMethod || prev.loginMethod,
-          instructions: selectedTpl.instructions || prev.instructions,
-          priceTotalEUR: selectedTpl.priceTotalEUR !== undefined ? selectedTpl.priceTotalEUR : prev.priceTotalEUR,
-          workerPayUSD: selectedTpl.workerPayUSD !== undefined ? selectedTpl.workerPayUSD : prev.workerPayUSD,
-          paymentMethod: selectedTpl.paymentMethod || prev.paymentMethod,
-          tags: selectedTpl.tags || prev.tags,
-          checklist: selectedTpl.checklist ? selectedTpl.checklist.map(item => ({ ...item, id: `chk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, done: false })) : prev.checklist
-        }));
-        showToast(`✨ Plantilla "${selectedTpl.name}" cargada correctamente`);
-      };
-
-      const handleDeleteTemplate = async (tplId) => {
-        if (!db) return;
-        try {
-          await deleteDoc(doc(db, "mission_templates", tplId));
-          showToast('🗑️ Plantilla eliminada');
-        } catch (e) {
-          console.error(e);
-        }
-      };
-
+      // =========================================================================
+      // MOTOR DE AUTOMATIZACIÓN FANTASMA DE WHATSAPP (FIREBASE QUEUE + MAKE WEBHOOK)
+      // =========================================================================
       const triggerAutomaticClientWhatsApp = async ({
         mission,
-        eventType,
-        metaTemplateName,
+        eventType, // 'mission_started' | 'mission_paused' | 'mission_resumed' | 'checklist_step' | 'mission_completed'
+        metaTemplateName, // Nombre sugerido de la plantilla en Meta WhatsApp Cloud API
         stepDetail = '',
         progressText = '',
         notes = ''
@@ -498,25 +438,29 @@
 
         const rawPhone = mission.clientPhone || mission.clientContact || '';
         const cleanMetaPhone = sanitizePhoneForMeta(rawPhone);
-        if (!cleanMetaPhone || cleanMetaPhone.length < 8) return;
+        if (!cleanMetaPhone || cleanMetaPhone.length < 8) {
+          return; // Si el cliente no tiene número de teléfono válido, no dispara WhatsApp
+        }
 
+        // Comprobar si este tipo de evento está activo en la configuración del Bot
         if (eventType === 'mission_started' && !automationSettings.notifyOnStart) return;
         if (eventType === 'mission_paused' && !automationSettings.notifyOnPause) return;
         if (eventType === 'mission_resumed' && !automationSettings.notifyOnResume) return;
         if (eventType === 'checklist_step' && !automationSettings.notifyOnChecklist) return;
         if (eventType === 'mission_completed' && !automationSettings.notifyOnComplete) return;
 
+        // Textos automáticos listos para enviar o inyectar como variables
         let fullMessageText = '';
         if (eventType === 'mission_started') {
-          fullMessageText = `▶️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". Vuelvo a entrar a tu cuenta para continuar con la misión "${mission.missionTitle}". Por favor, no entres al juego hasta que te llegue un mensaje de PAUSA. 😏`;
+          fullMessageText = `▶️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". Vuelvo a entrar a tu cuenta para continuar con la misión "${mission.missionTitle}". Por favor, no entres al juego hasta que te llegue un mensaje de PAUSA, y si te he sacado de la cuenta, ya no vuelvas a entrar tampoco. 😏`;
         } else if (eventType === 'mission_paused') {
-          fullMessageText = `⏸️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". He puesto en pausa temporalmente tu mision "${mission.missionTitle}". Tienes la cuenta 100% libre para entrar a jugar con normalidad. 😋`;
+          fullMessageText = `⏸️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". He puesto en pausa temporalmente tu mision "${mission.missionTitle}". Tienes la cuenta 100% libre para entrar a jugar con normalidad. Te llegará otro mensaje por aquí cuando vuelva a retomarla! 😋`;
         } else if (eventType === 'mission_resumed') {
-          fullMessageText = `▶️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". Vuelvo a entrar a tu cuenta para continuar con la misión "${mission.missionTitle}". Por favor, no entres al juego hasta que te llegue un mensaje de PAUSA. 😏`;
+          fullMessageText = `▶️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". Vuelvo a entrar a tu cuenta para continuar con la misión "${mission.missionTitle}". Por favor, no entres al juego hasta que te llegue un mensaje de PAUSA, y si te he sacado de la cuenta, ya no vuelvas a entrar tampoco. 😏`;
         } else if (eventType === 'checklist_step') {
-          fullMessageText = `☑️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". Nuevo avance en tu misión "${mission.missionTitle}": Acabo de completar "${stepDetail}" (Progreso Total: ${progressText}). 😁`;
+          fullMessageText = `☑️ MENSAJE AUTOMATICO: Hola "${mission.clientName}". Nuevo avance en tu misión "${mission.missionTitle}": Acabo de completar "${stepDetail}" (Progreso Total: ${progressText}). Por favor, no entres al juego hasta que te llegue un mensaje de PAUSA. 😁`;
         } else if (eventType === 'mission_completed') {
-          fullMessageText = `💯✅🚀 MENSAJE AUTOMATICO: Hola "${mission.clientName}"!! Enhorabuena! Tu misión "${mission.missionTitle}" ya está 100% COMPLETADA. Ya puedes entrar a tu cuenta y disfrutar de las recompensas. Muchas Gracias por tu confianza!! 🤯😉`;
+          fullMessageText = `💯✅🚀 MENSAJE AUTOMATICO: Hola "${mission.clientName}"!! Enhorabuena! Tu misión "${mission.missionTitle}" ya está 100% COMPLETADA. Ya puedes entrar a tu cuenta y disfrutar de las recompensas. Muchas Gracias por tu confianza!! Te espero para la siguiente! 🤯😉`;
         }
 
         const now = Date.now();
@@ -528,7 +472,7 @@
           isoDate: new Date(now).toISOString(),
           eventType,
           metaTemplateName,
-          toPhoneMeta: cleanMetaPhone,
+          toPhoneMeta: cleanMetaPhone, // Formato oficial Meta sin '+' (ej: 34611223344)
           toPhoneE164: `+${cleanMetaPhone}`,
           clientName: mission.clientName || 'Cliente',
           missionTitle: mission.missionTitle || 'Misión',
@@ -536,19 +480,22 @@
           progressText: progressText || '100%',
           notes: notes || 'Completado con éxito',
           fullMessageText,
+          // Variables listas para mapear en los parámetros {{1}}, {{2}}, {{3}} de la plantilla de Meta
           templateParam1: mission.clientName || 'Cliente',
           templateParam2: mission.missionTitle || 'Misión',
           templateParam3: stepDetail || progressText || notes || 'Listo'
         };
 
+        // 1. Guardar en la colección "whatsapp_queue" de Firebase (por si Make escucha Firestore)
         if (db) {
           try {
             await setDoc(doc(db, "whatsapp_queue", queueId), payload);
           } catch (e) {
-            console.error(e);
+            console.error("Error guardando en whatsapp_queue:", e);
           }
         }
 
+        // 2. Disparar Webhook directo e instantáneo a Make.com en segundo plano ("Fantasma")
         if (automationSettings.makeWebhookUrl && automationSettings.makeWebhookUrl.startsWith('http')) {
           try {
             fetch(automationSettings.makeWebhookUrl.trim(), {
@@ -581,7 +528,7 @@
         const testPayload = {
           id: `wa-test-${Date.now()}`,
           timestamp: Date.now(),
-          isoDate: new Date(now).toISOString(),
+          isoDate: new Date().toISOString(),
           eventType: 'mission_paused',
           metaTemplateName: 'mision_pausada',
           toPhoneMeta: '34600000000',
@@ -591,7 +538,7 @@
           stepDetail: 'Camino 1',
           progressText: '1/3 (33%)',
           notes: 'Prueba de conexión',
-          fullMessageText: 'Prueba de conexión con Make.com',
+          fullMessageText: '¡Hola Cliente de Prueba! ⏸️ Hemos puesto en pausa temporalmente tu misión "3 Caminos Necrópolis". Tienes tu cuenta 100% libre para entrar a jugar.',
           templateParam1: 'Cliente de Prueba',
           templateParam2: '3 Caminos Necrópolis',
           templateParam3: '1/3 (33%)'
@@ -679,7 +626,7 @@
         try {
           await setDoc(doc(db, "notifications", notifId), newNotif);
         } catch (err) {
-          console.error(err);
+          console.error("Error enviando notificación:", err);
         }
       };
 
@@ -687,7 +634,7 @@
         if (!db || notif.read) return;
         try {
           await setDoc(doc(db, "notifications", notif.id), { read: true }, { merge: true });
-        } catch (e) {}
+        } catch (e) { console.error(e); }
       };
 
       const handleMarkAllNotifsAsRead = async () => {
@@ -785,7 +732,7 @@
           await signOut(auth);
           setIsNotifPanelOpen(false);
           showToast('Sesión cerrada');
-        } catch (err) {}
+        } catch (err) { console.error(err); }
       };
 
       const getMissionTagIds = (mission) => Array.isArray(mission.tags) ? mission.tags : (mission.tagId ? [mission.tagId] : []);
@@ -995,6 +942,7 @@
         showToast(`⚡ Datos y WhatsApp de ${clientData.clientName} autocompletados`);
       };
 
+      
       const countryAnalytics = useMemo(() => {
         const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
         const totalMissionsInPeriod = filteredMissions.length;
@@ -1048,7 +996,7 @@
         return { statsList, maxCount, totalCountries: statsList.length };
       }, [missions, tagStatsPeriod]);
 
-      const clientAnalytics = useMemo(() => {
+const clientAnalytics = useMemo(() => {
         const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
         const totalMissionsInPeriod = filteredMissions.length;
         const map = new Map();
@@ -1110,7 +1058,49 @@
         return { statsList, maxCount, totalClients: statsList.length };
       }, [missions, tagStatsPeriod]);
 
-      const handleSaveTag = async (e) => {
+      
+      const handleSaveManualTemplate = async (e) => {
+        e.preventDefault();
+        const cleanName = (templateForm.name || templateForm.missionTitle || '').trim();
+        if (!cleanName) { showToast('⚠️ Escribe un nombre o título para la plantilla'); return; }
+        const tplId = editingTemplate ? editingTemplate.id : `tpl-${Date.now()}`;
+        const payload = {
+          id: tplId,
+          name: cleanName,
+          missionTitle: templateForm.missionTitle || cleanName,
+          gameCategory: templateForm.gameCategory || 'Exploración de Actos',
+          loginMethod: templateForm.loginMethod || 'Kabam ID',
+          instructions: templateForm.instructions || '',
+          priceTotalEUR: Number(templateForm.priceTotalEUR) || 0,
+          workerPayUSD: Number(templateForm.workerPayUSD) || 0,
+          paymentMethod: templateForm.paymentMethod || 'Bizum',
+          tags: templateForm.tags || [],
+          checklist: templateForm.checklist || [],
+          createdAt: editingTemplate ? editingTemplate.createdAt : Date.now()
+        };
+        if (db) {
+          try {
+            await setDoc(doc(db, "mission_templates", tplId), payload);
+            showToast(`⭐ Plantilla "${payload.name}" guardada con éxito`);
+            setEditingTemplate(null);
+            setTemplateForm({ name: '', missionTitle: '', gameCategory: 'Exploración de Actos', loginMethod: 'Kabam ID', instructions: '', priceTotalEUR: '90', workerPayUSD: '60', paymentMethod: 'Bizum', tags: [], checklist: [] });
+          } catch (err) {
+            console.error(err);
+            showToast('⚠️ Error al guardar la plantilla');
+          }
+        }
+      };
+
+      const handleAddCheckToTemplateForm = () => {
+        const clean = newTplCheckItem.trim();
+        if (!clean) return;
+        const newItem = { id: `chk-${Date.now()}`, text: clean, done: false };
+        setTemplateForm(prev => ({ ...prev, checklist: [...(prev.checklist || []), newItem] }));
+        setNewTplCheckItem('');
+      };
+
+
+const handleSaveTag = async (e) => {
         e.preventDefault();
         const cleanName = tagForm.name.trim();
         if (!cleanName) { showToast('⚠️ Escribe un nombre para la etiqueta'); return; }
@@ -1185,6 +1175,7 @@
         }));
       };
 
+      // Al marcar un paso de la Checklist -> Notifica al Creador y dispara WhatsApp Fantasma al Cliente
       const handleToggleMissionChecklistItem = async (mission, itemId) => {
         if (!db) return;
         const currentList = getMissionChecklist(mission);
@@ -1216,6 +1207,7 @@
               });
             }
 
+            // Disparo automático de WhatsApp al cliente informando del objetivo completado
             await triggerAutomaticClientWhatsApp({
               mission,
               eventType: 'checklist_step',
@@ -1433,6 +1425,7 @@
             });
           }
 
+          // Disparar WhatsApp automático al cliente también si el Creador cambia el estado manualmente
           if (newStatus === 'En Pausa') {
             await triggerAutomaticClientWhatsApp({ mission, eventType: 'mission_paused', metaTemplateName: 'mision_pausada' });
           } else if (newStatus === 'En Progreso') {
@@ -1464,6 +1457,7 @@
         }
       };
 
+      // Cuando el Mercenario empieza o reanuda la misión -> Dispara WhatsApp Fantasma al Cliente
       const handleStartMission = async (mission) => {
         const now = Date.now();
         const isResuming = mission.status === 'En Pausa';
@@ -1495,6 +1489,7 @@
         showToast(isResuming ? '▶️ Misión reanudada' : '▶️ Misión puesta En Curso');
       };
 
+      // Cuando el Mercenario pausa la misión -> Dispara WhatsApp Fantasma al Cliente (Cuenta Libre)
       const handlePauseMission = async (mission) => {
         const now = Date.now();
         const startRef = Number(mission.lastResumedAt || mission.startedAt || now);
@@ -1535,6 +1530,7 @@
         showToast('⬆️ Misión priorizada');
       };
 
+      // Cuando el Mercenario completa la misión -> Dispara WhatsApp Fantasma al Cliente (100% Completada)
       const handleConfirmCompleteMission = async (e) => {
         e.preventDefault();
         if (!completingMission) return;
@@ -1880,6 +1876,7 @@
         );
       };
 
+      // Tarjeta de Misión del Mercenario (sin mostrar el tiempo de trabajo, solo visible en el panel del Creador)
       const renderWorkerMissionCard = (m, index) => {
         const isFirst = index === 0;
         const isInProgress = m.status === 'En Progreso';
@@ -2033,6 +2030,7 @@
 
       return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20">
+          {/* BANNER EMERGENTE SUPERIOR DE NOTIFICACIÓN EN VIVO */}
           {liveBannerAlert && (
             <div
               onClick={() => {
@@ -2426,6 +2424,7 @@
                         )}
                       </div>
 
+
                       {/* BLOQUE 3: RANKING DE PAÍSES POR TELÉFONO */}
                       <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-4">
@@ -2481,72 +2480,134 @@
                     </div>
                   </div>
                 ) : creatorTab === 'tags' ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 h-fit">
-                      <div>
-                        <h3 className="font-extrabold text-white text-base flex items-center gap-2">
-                          <Tag className="w-4 h-4 text-amber-400" /> {editingTag ? 'Editar Etiqueta' : 'Crear Nueva Etiqueta'}
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-1">Crea etiquetas personalizadas para clasificar tus misiones y medir cuáles se venden más.</p>
-                      </div>
-                      <form onSubmit={handleSaveTag} className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-300 mb-1">Nombre de la Etiqueta *</label>
-                          <input type="text" required value={tagForm.name} onChange={(e) => setTagForm({ ...tagForm, name: e.target.value })} placeholder="Ej. Acto 9.1, Necrópolis..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-300 mb-2">Color de Etiqueta</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {TAG_COLOR_OPTIONS.map(c => (
-                              <button key={c.id} type="button" onClick={() => setTagForm({ ...tagForm, color: c.id })} className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${tagForm.color === c.id ? `${c.badgeClass} ring-2 ring-white/30` : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'}`}>
-                                <span className={`w-2.5 h-2.5 rounded-full ${c.barClass}`} />{c.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          {editingTag && <button type="button" onClick={() => { setEditingTag(null); setTagForm({ name: '', color: 'indigo' }); }} className="flex-1 py-2.5 bg-slate-800 text-xs font-bold rounded-xl text-slate-300">Cancelar</button>}
-                          <button type="submit" className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl transition shadow-lg shadow-amber-500/20">{editingTag ? 'Guardar Cambios' : '+ Crear Etiqueta'}</button>
-                        </div>
-                      </form>
-                    </div>
-
-                    <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 h-fit">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* COLUMNA 1: GESTIÓN DE ETIQUETAS */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 h-fit">
                         <div>
                           <h3 className="font-extrabold text-white text-base flex items-center gap-2">
-                            <Tag className="w-4 h-4 text-amber-400" /> Mis Etiquetas Activas ({tags.length})
+                            <Tag className="w-4 h-4 text-amber-400" /> {editingTag ? 'Editar Etiqueta' : 'Crear Nueva Etiqueta'}
                           </h3>
-                          <p className="text-xs text-slate-400 mt-0.5">Puedes editar el nombre o color de cualquier etiqueta en cualquier momento.</p>
+                          <p className="text-xs text-slate-400 mt-1">Crea etiquetas personalizadas para clasificar tus misiones.</p>
+                        </div>
+                        <form onSubmit={handleSaveTag} className="space-y-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-300 mb-1">Nombre de la Etiqueta *</label>
+                            <input type="text" required value={tagForm.name} onChange={(e) => setTagForm({ ...tagForm, name: e.target.value })} placeholder="Ej. Acto 9.1, Necrópolis..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-300 mb-2">Color de Etiqueta</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {TAG_COLOR_OPTIONS.map(c => (
+                                <button key={c.id} type="button" onClick={() => setTagForm({ ...tagForm, color: c.id })} className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${tagForm.color === c.id ? `${c.badgeClass} ring-2 ring-white/30` : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'}`}>
+                                  <span className={`w-2.5 h-2.5 rounded-full ${c.barClass}`} />{c.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {editingTag && <button type="button" onClick={() => { setEditingTag(null); setTagForm({ name: '', color: 'indigo' }); }} className="flex-1 py-2.5 bg-slate-800 text-xs font-bold rounded-xl text-slate-300">Cancelar</button>}
+                            <button type="submit" className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl transition shadow-lg shadow-amber-500/20">{editingTag ? 'Guardar Cambios' : '+ Crear Etiqueta'}</button>
+                          </div>
+                        </form>
+
+                        <div className="pt-4 border-t border-slate-800 space-y-3">
+                          <span className="text-xs font-bold uppercase text-slate-400 block">Mis Etiquetas Activas ({tags.length})</span>
+                          {tags.length > 0 ? (
+                            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                              {tags.map(t => {
+                                const colorMeta = getTagColorMeta(t.color);
+                                const countUses = missions.filter(m => getMissionTagIds(m).includes(t.id)).length;
+                                return (
+                                  <div key={t.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold border flex items-center gap-1.5 truncate ${colorMeta.badgeClass}`}>
+                                        <Tag className="w-3 h-3 shrink-0" /> <span className="truncate">{t.name}</span>
+                                      </span>
+                                      <span className="text-[11px] text-slate-500 font-bold shrink-0">({countUses} misiones)</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button onClick={() => { setEditingTag(t); setTagForm({ name: t.name, color: t.color || 'indigo' }); }} className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300" title="Editar"><Edit3 className="w-3.5 h-3.5" /></button>
+                                      <button onClick={() => setTagToDelete(t)} className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : <p className="text-xs text-slate-500 italic">No hay etiquetas creadas.</p>}
                         </div>
                       </div>
-                      {tags.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {tags.map(t => {
-                            const colorMeta = getTagColorMeta(t.color);
-                            const countUses = missions.filter(m => getMissionTagIds(m).includes(t.id)).length;
-                            return (
-                              <div key={t.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className={`px-2.5 py-1 rounded-lg text-xs font-extrabold border flex items-center gap-1.5 truncate ${colorMeta.badgeClass}`}>
-                                    <Tag className="w-3 h-3 shrink-0" /> <span className="truncate">{t.name}</span>
-                                  </span>
-                                  <span className="text-[11px] text-slate-500 font-bold shrink-0">({countUses} misiones)</span>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button onClick={() => { setEditingTag(t); setTagForm({ name: t.name, color: t.color || 'indigo' }); }} className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300" title="Editar etiqueta"><Edit3 className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => setTagToDelete(t)} className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white" title="Eliminar etiqueta"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </div>
+
+                      {/* COLUMNA 2: GESTIÓN Y CREACIÓN MANUAL DE PLANTILLAS */}
+                      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 h-fit">
+                        <div>
+                          <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                            <Bookmark className="w-4 h-4 text-amber-400" /> {editingTemplate ? 'Editar Plantilla' : 'Crear Plantilla Manual'}
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-1">Crea o edita plantillas para autocompletar misiones al instante.</p>
+                        </div>
+
+                        <form onSubmit={handleSaveManualTemplate} className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-300 mb-1">Nombre de la Plantilla *</label>
+                            <input type="text" required value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value, missionTitle: templateForm.missionTitle || e.target.value })} placeholder="Ej. Necrópolis Completa" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-300 mb-1">Título Estándar de Misión *</label>
+                            <input type="text" required value={templateForm.missionTitle} onChange={(e) => setTemplateForm({ ...templateForm, missionTitle: e.target.value })} placeholder="Ej. 3 Caminos Necrópolis" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white" />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div><label className="block text-[11px] text-slate-400 mb-1">Cobro (€ EUR)</label><input type="number" step="any" value={templateForm.priceTotalEUR} onChange={(e) => setTemplateForm({ ...templateForm, priceTotalEUR: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" /></div>
+                            <div><label className="block text-[11px] text-slate-400 mb-1">Pago Merc ($ USD)</label><input type="number" step="any" value={templateForm.workerPayUSD} onChange={(e) => setTemplateForm({ ...templateForm, workerPayUSD: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" /></div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">Subtareas / Checklist por defecto</label>
+                            {(templateForm.checklist || []).length > 0 && (
+                              <div className="space-y-1 mb-2 max-h-28 overflow-y-auto">
+                                {(templateForm.checklist || []).map((item, idx) => (
+                                  <div key={item.id} className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300">
+                                    <span>#{idx + 1} {item.text}</span>
+                                    <button type="button" onClick={() => setTemplateForm({ ...templateForm, checklist: templateForm.checklist.filter(i => i.id !== item.id) })} className="text-rose-400 font-bold px-1">×</button>
+                                  </div>
+                                ))}
                               </div>
-                            );
-                          })}
+                            )}
+                            <div className="flex items-center gap-1.5">
+                              <input type="text" value={newTplCheckItem} onChange={(e) => setNewTplCheckItem(e.target.value)} placeholder="Ej. Camino 1..." className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" />
+                              <button type="button" onClick={handleAddCheckToTemplateForm} className="px-3 py-1.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 rounded-lg text-xs font-bold">+ Paso</button>
+                            </div>
+                          </div>
+
+                          <div><label className="block text-[11px] text-slate-400 mb-1">Instrucciones</label><textarea rows={2} value={templateForm.instructions} onChange={(e) => setTemplateForm({ ...templateForm, instructions: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white" /></div>
+
+                          <div className="flex gap-2 pt-2">
+                            {editingTemplate && <button type="button" onClick={() => { setEditingTemplate(null); setTemplateForm({ name: '', missionTitle: '', gameCategory: 'Exploración de Actos', loginMethod: 'Kabam ID', instructions: '', priceTotalEUR: '90', workerPayUSD: '60', paymentMethod: 'Bizum', tags: [], checklist: [] }); }} className="flex-1 py-2 bg-slate-800 text-xs font-bold rounded-xl text-slate-300">Cancelar</button>}
+                            <button type="submit" className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-extrabold text-xs rounded-xl shadow">{editingTemplate ? 'Actualizar Plantilla' : '+ Crear Plantilla'}</button>
+                          </div>
+                        </form>
+
+                        <div className="pt-4 border-t border-slate-800 space-y-2.5">
+                          <span className="text-xs font-bold uppercase text-slate-400 block">Plantillas Guardadas ({templates.length})</span>
+                          {templates.length > 0 ? (
+                            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                              {templates.map(tpl => (
+                                <div key={tpl.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="font-extrabold text-xs text-amber-300 truncate">⭐ {tpl.name}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">€{tpl.priceTotalEUR} EUR • {(tpl.checklist || []).length} subtareas</div>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => { setEditingTemplate(tpl); setTemplateForm({ name: tpl.name, missionTitle: tpl.missionTitle, gameCategory: tpl.gameCategory || 'Exploración de Actos', loginMethod: tpl.loginMethod || 'Kabam ID', instructions: tpl.instructions || '', priceTotalEUR: tpl.priceTotalEUR, workerPayUSD: tpl.workerPayUSD, paymentMethod: tpl.paymentMethod || 'Bizum', tags: tpl.tags || [], checklist: tpl.checklist || [] }); }} className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300" title="Editar"><Edit3 className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => handleDeleteTemplate(tpl.id)} className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-600 text-slate-300 hover:text-white" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <p className="text-xs text-slate-500 italic">No hay plantillas guardadas.</p>}
                         </div>
-                      ) : (
-                        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
-                          <Tag className="w-10 h-10 text-slate-500 mx-auto" />
-                          <h4 className="font-bold text-white text-sm">Aún no has creado ninguna etiqueta</h4>
-                        </div>
-                      )}
+                      </div>
                     </div>
                   </div>
                 ) : creatorTab === 'finances' ? (
@@ -3053,7 +3114,7 @@
             </div>
           )}
 
-          {/* MODAL NUEVA / EDITAR MISIÓN CON PLANTILLAS Y WHATSAPP */}
+          {/* MODAL NUEVA / EDITAR MISIÓN CON CAMPO WHATSAPP DEL CLIENTE */}
           {isMissionModalOpen && (
             <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -3061,7 +3122,7 @@
                   <div>
                     <h3 className="font-extrabold text-white text-base">{editingMission ? 'Editar Misión' : 'Nueva Misión'}</h3>
                     <p className="text-[11px] text-amber-300 flex items-center gap-1 mt-0.5">
-                      <Sparkles className="w-3 h-3" /> Usa plantillas o autocompleta con tus clientes frecuentes
+                      <Sparkles className="w-3 h-3" /> Escribe o elige un cliente habitual para autocompletar su WhatsApp, correo y contraseña
                     </p>
                   </div>
                   <button type="button" onClick={() => setIsMissionModalOpen(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800/60">✕</button>
@@ -3072,58 +3133,6 @@
                   className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4"
                   style={{ WebkitOverflowScrolling: 'touch' }}
                 >
-                  {/* SECCIÓN DE PLANTILLAS FRECUENTES */}
-                  {!editingMission && (
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold text-amber-300 flex items-center gap-1.5">
-                          <Bookmark className="w-4 h-4 text-amber-400" /> Plantillas de Misiones Frecuentes
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleSaveAsTemplate}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[10px] font-extrabold flex items-center gap-1 shadow transition"
-                          title="Guarda los datos actuales como plantilla rápida"
-                        >
-                          <BookmarkPlus className="w-3.5 h-3.5" /> Guardar actual como plantilla
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <select
-                          onChange={handleSelectTemplate}
-                          defaultValue=""
-                          className="w-full bg-slate-950 border border-amber-500/40 rounded-lg px-3 py-2 text-xs font-bold text-amber-200 focus:outline-none"
-                        >
-                          <option value="" disabled>✨ Selecciona una plantilla para rellenar de golpe...</option>
-                          {templates.map(t => (
-                            <option key={t.id} value={t.id}>
-                              ⭐ {t.name} (€{t.priceTotalEUR} / ${t.workerPayUSD})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {templates.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {templates.map(t => (
-                            <span key={t.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-slate-300">
-                              {t.name}
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTemplate(t.id)}
-                                className="text-rose-400 hover:text-rose-300 font-bold ml-1"
-                                title="Eliminar plantilla"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="relative">
                       <label className="block text-xs font-bold text-slate-300 mb-1">Cliente *</label>
@@ -3183,6 +3192,27 @@
                     </div>
                   </div>
 
+                  {!editingMission && knownClientsDatabase.length > 0 && (
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2.5 space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-400" /> Clientes Frecuentes (Toca uno para autorrellenar su WhatsApp y credenciales):
+                      </span>
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                        {knownClientsDatabase.slice(0, 8).map((c, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSelectKnownClient(c)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-amber-500/20 border border-slate-800 hover:border-amber-500/40 text-xs font-bold text-slate-200 hover:text-amber-300 shrink-0 transition flex items-center gap-1"
+                          >
+                            <span>{c.clientName}</span>
+                            <span className="text-[10px] text-slate-500">({c.missionsCount})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div><label className="block text-xs font-bold text-slate-300 mb-1">Título de la Misión *</label><input type="text" required value={missionForm.missionTitle} onChange={(e) => setMissionForm({ ...missionForm, missionTitle: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white" /></div>
 
                   {/* CHECKLIST EDITABLE Y CONFIGURABLE DE SUBTAREAS */}
@@ -3217,7 +3247,7 @@
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[11px] text-slate-400">Opcional: divide misiones largas (ej. "Camino 1", "Camino 2", "Jefe Final").</p>
+                      <p className="text-[11px] text-slate-400">Opcional: divide misiones largas (ej. "Camino 1", "Camino 2", "Jefe Final"). Al marcar cada paso se avisará al cliente por WhatsApp.</p>
                     )}
 
                     <div className="flex items-center gap-2">
