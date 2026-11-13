@@ -134,10 +134,16 @@
       } catch (e) {}
     };
 
+    const isTestClient = (name) => {
+      if (!name) return false;
+      const clean = name.trim().toLowerCase();
+      return clean === 'cliente de prueba' || clean.includes('cliente de prueba');
+    };
+
     const isExcludedInternalClient = (name) => {
       if (!name) return true;
       const clean = name.trim().toLowerCase();
-      return clean === 'acumulado whatsapp' || clean.includes('acumulado whatsapp');
+      return clean === 'acumulado whatsapp' || clean.includes('acumulado whatsapp') || isTestClient(clean);
     };
 
     const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -688,7 +694,7 @@ function App() {
       const workerPerformanceStats = useMemo(() => {
         const stats = {};
         workers.forEach(w => {
-          const wMissions = missions.filter(m => m.workerId === w.id);
+          const wMissions = missions.filter(m => m.workerId === w.id && !isTestClient(m.clientName));
           const completedMissions = wMissions.filter(m => m.status === 'Completada');
           const currentMonthCompleted = monthFilter === 'ALL' ? completedMissions : completedMissions.filter(m => m.monthYear === monthFilter);
           const activeQueueCount = wMissions.filter(m => m.status === 'En Progreso' || m.status === 'En Pausa' || m.status === 'Pendiente').length;
@@ -832,7 +838,7 @@ function App() {
       const creatorFinancialsByMonth = useMemo(() => {
         const summary = {};
         availableMonths.forEach(month => {
-          const monthMissions = missions.filter(m => m.monthYear === month);
+          const monthMissions = missions.filter(m => m.monthYear === month && !isTestClient(m.clientName));
 
           const calcModalityStats = (list) => {
             const revenueEUR = list.reduce((acc, m) => acc + (Number(m.priceTotalEUR) || 0), 0);
@@ -866,7 +872,8 @@ function App() {
       }, [missions, availableMonths]);
 
       const tagAnalytics = useMemo(() => {
-        const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
+        const nonTestMissions = missions.filter(m => !isTestClient(m.clientName));
+        const filteredMissions = tagStatsPeriod === 'ALL' ? nonTestMissions : nonTestMissions.filter(m => m.monthYear === tagStatsPeriod);
         const totalMissionsInPeriod = filteredMissions.length;
 
         const statsList = tags.map(t => {
@@ -955,7 +962,8 @@ function App() {
 
       
       const countryAnalytics = useMemo(() => {
-        const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
+        const nonTestMissions = missions.filter(m => !isExcludedInternalClient(m.clientName));
+        const filteredMissions = tagStatsPeriod === 'ALL' ? nonTestMissions : nonTestMissions.filter(m => m.monthYear === tagStatsPeriod);
         const totalMissionsInPeriod = filteredMissions.length;
         const map = new Map();
 
@@ -1008,7 +1016,8 @@ function App() {
       }, [missions, tagStatsPeriod]);
 
 const clientAnalytics = useMemo(() => {
-        const filteredMissions = tagStatsPeriod === 'ALL' ? missions : missions.filter(m => m.monthYear === tagStatsPeriod);
+        const nonTestMissions = missions.filter(m => !isExcludedInternalClient(m.clientName));
+        const filteredMissions = tagStatsPeriod === 'ALL' ? nonTestMissions : nonTestMissions.filter(m => m.monthYear === tagStatsPeriod);
         const totalMissionsInPeriod = filteredMissions.length;
         const map = new Map();
 
@@ -1381,7 +1390,7 @@ const handleSaveTag = async (e) => {
         const worker = workers.find(w => w.id === workerId);
         if (!worker) return;
 
-        const pendingMissionsToPay = missions.filter(m => m.workerId === workerId && m.status === 'Completada' && Number(m.workerPayUSD) > 0);
+        const pendingMissionsToPay = missions.filter(m => m.workerId === workerId && !isTestClient(m.clientName) && m.status === 'Completada' && Number(m.workerPayUSD) > 0);
         const amountUSD = pendingMissionsToPay.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
 
         if (amountUSD <= 0) { showToast(`⚠️ ${worker.name} no tiene saldo pendiente`); return; }
@@ -2777,7 +2786,7 @@ const handleSaveTag = async (e) => {
                             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                               {tags.map(t => {
                                 const colorMeta = getTagColorMeta(t.color);
-                                const countUses = missions.filter(m => getMissionTagIds(m).includes(t.id)).length;
+                                const countUses = missions.filter(m => !isTestClient(m.clientName) && getMissionTagIds(m).includes(t.id)).length;
                                 return (
                                   <div key={t.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -2992,7 +3001,7 @@ const handleSaveTag = async (e) => {
                       <div><h3 className="font-extrabold text-white text-base">💳 Liquidación y Pagos a Mercenarios</h3></div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {workers.map(w => {
-                          const workerCompletedPending = missions.filter(m => m.workerId === w.id && m.status === 'Completada' && Number(m.workerPayUSD) > 0);
+                          const workerCompletedPending = missions.filter(m => m.workerId === w.id && !isTestClient(m.clientName) && m.status === 'Completada' && Number(m.workerPayUSD) > 0);
                           const pendingUSD = workerCompletedPending.reduce((acc, m) => acc + (Number(m.workerPayUSD) || 0), 0);
                           const wColor = getWorkerColorMeta(w.color);
                           return (
