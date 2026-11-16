@@ -40,7 +40,7 @@
 <body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
   <div id="root"></div>
   <div id="gmerc-test-warning" style="display:none;position:fixed;left:10px;bottom:10px;z-index:9999;max-width:460px;padding:10px 14px;border-radius:10px;background:#7c2d12;color:#fff;font:600 12px/1.4 system-ui;box-shadow:0 6px 18px #0009;pointer-events:none">
-    🧪 WEB TEST — FIRESTORE DE PRODUCCIÓN COMPARTIDO. Los cambios en misiones y pagos son reales. WhatsApp bloqueado aquí.
+    🧪 WEB TEST — FIRESTORE REAL COMPARTIDO: cambios en misiones/pagos son reales. WhatsApp y sus ajustes están bloqueados aquí.
   </div>
   <script>
     if (location.hostname === 'theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/')) {
@@ -244,7 +244,8 @@
       return WORKER_COLOR_OPTIONS[0];
     };
 
-    // Cifrado de extremo a extremo para contraseñas de clientes
+    // AVISO: COMPATIBILIDAD CON DATOS ANTIGUOS. Base64 + clave en HTML NO es cifrado seguro.
+    // No modificar aún este formato: requiere migración de credenciales desde un servidor seguro.
     const SECRET_CRYPTO_KEY = "GestionMercenariosSecureKey2026!_";
 
     const encryptPassword = (plainText) => {
@@ -364,7 +365,9 @@
 
       const [toastMessage, setToastMessage] = useState(null);
       const [visibleCredentials, setVisibleCredentials] = useState({});
-      const [showAllCreatorPasswords, setShowAllCreatorPasswords] = useState(true);
+      // Privacidad visual: no mostrar todas las contraseñas por defecto.
+      // Esto NO sustituye el cifrado real, pendiente de la fase servidor.
+      const [showAllCreatorPasswords, setShowAllCreatorPasswords] = useState(false);
       const [isCompactView, setIsCompactView] = useState(false);
       const [clientFilterMode, setClientFilterMode] = useState('TOP');
       const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -419,11 +422,16 @@
 
         // Las notificaciones se cargan por destinatario en otro efecto.
 
-        const unsubSettings = onSnapshot(doc(db, "settings", "whatsapp_automation"), (docSnap) => {
-          if (docSnap.exists()) {
-            setAutomationSettings(prev => ({ ...prev, ...docSnap.data() }));
-          }
-        });
+        // FASE 1C: TEST no lee la URL privada de Make.com del Firestore REAL.
+        // Producción conserva temporalmente su mecanismo original hasta la migración del servidor.
+        let unsubSettings = () => {};
+        if (!IS_TEST_GITHUB) {
+          unsubSettings = onSnapshot(doc(db, "settings", "whatsapp_automation"), (docSnap) => {
+            if (docSnap.exists()) {
+              setAutomationSettings(prev => ({ ...prev, ...docSnap.data() }));
+            }
+          });
+        }
 
         return () => {
           unsubWorkers();
@@ -548,6 +556,12 @@
 
       const handleSaveBotSettings = async (e) => {
         e.preventDefault();
+        // Nunca modificar los ajustes de WhatsApp reales desde la web TEST.
+        if (IS_TEST_GITHUB) {
+          showToast('🧪 TEST: configuración de WhatsApp de producción protegida.');
+          setIsBotModalOpen(false);
+          return;
+        }
         if (db) {
           try {
             await setDoc(doc(db, "settings", "whatsapp_automation"), automationSettings, { merge: true });
@@ -2527,7 +2541,9 @@
                     {renderNotificationBell()}
                     <button
                       type="button"
-                      onClick={() => setIsBotModalOpen(true)}
+                      onClick={() => IS_TEST_GITHUB
+                        ? showToast('🧪 TEST: bot desactivado para proteger los ajustes reales.')
+                        : setIsBotModalOpen(true)}
                       className={`px-3.5 py-2 rounded-xl text-xs font-extrabold border flex items-center gap-1.5 transition ${
                         automationSettings.makeWebhookUrl && automationSettings.enabled
                           ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
@@ -4145,7 +4161,7 @@
                     <div>
                       <label className="block font-bold text-slate-400 mb-1">Contraseña Juego</label>
                       <input
-                        type="text"
+                        type="password"
                         value={missionForm.accountPass}
                         onChange={(e) => setMissionForm({ ...missionForm, accountPass: e.target.value })}
                         placeholder="Contraseña..."
