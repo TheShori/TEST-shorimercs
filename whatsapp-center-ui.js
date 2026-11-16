@@ -128,7 +128,7 @@ export function WhatsAppCenter({ authUser }) {
               source==='audit'?h('div',{className:'text-[11px] text-indigo-300'},'Misión ref.: '+record.missionRef):null),
             h(Pill,{label:source==='audit'?'Observado · NO enviado':'Aceptado · entrega no confirmada',color:source==='audit'?'amber':'emerald'})))) :
           h('div',{className:'rounded-xl border border-dashed border-slate-700 p-6 text-sm text-slate-400 text-center'},
-            entrySource?.status==='unavailable'?'No se puede mostrar el historial.':'No hay registros que coincidan con los filtros.'))),
+            entrySource?.status==='unavailable'?'No se puede mostrar el historial.':'No hay registros que coincidan con los filtros.')),
       h('div',{className:'rounded-xl bg-slate-900 border border-slate-800 p-4 text-xs text-slate-400 leading-relaxed'},
         'Pendientes, fallos y reintentos: todavía no existe un historial fiable para esos estados. ',
         'El registro de envíos solo incluye operaciones con ID guardado durante la retención del servidor. ',
