@@ -39,6 +39,14 @@
 </head>
 <body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
   <div id="root"></div>
+  <div id="gmerc-test-warning" style="display:none;position:fixed;left:10px;bottom:10px;z-index:9999;max-width:460px;padding:10px 14px;border-radius:10px;background:#7c2d12;color:#fff;font:600 12px/1.4 system-ui;box-shadow:0 6px 18px #0009;pointer-events:none">
+    🧪 WEB TEST — FIRESTORE DE PRODUCCIÓN COMPARTIDO. Los cambios en misiones y pagos son reales. WhatsApp bloqueado aquí.
+  </div>
+  <script>
+    if (location.hostname === 'theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/')) {
+      document.getElementById('gmerc-test-warning').style.display = 'block';
+    }
+  </script>
 
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -75,6 +83,11 @@
     }
 
     const ADMIN_EMAIL = 'victorsoripar@gmail.com';
+
+    // GESTIONMERCENARIOS_FASE1B_TEST_UID
+    // NO cambiar firebaseConfig: TEST sigue leyendo el Firestore de producción.
+    const IS_TEST_GITHUB = window.location.hostname === 'theshori.github.io'
+      && window.location.pathname.startsWith('/TEST-shorimercs/');
 
     // Formateador limpio de moneda para evitar decimales infinitos como 216.48999999999998
     const formatMoney = (val) => {
@@ -381,7 +394,12 @@
       useEffect(() => {
         if (!db || !authUser) return;
 
-        const unsubWorkers = onSnapshot(collection(db, "workers"), (snapshot) => {
+        // Admin ve todos los perfiles; cada mercenario consulta solo su UID.
+        const isAdminForWorkerQuery = authUser.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase();
+        const workersQuery = isAdminForWorkerQuery
+          ? collection(db, "workers")
+          : query(collection(db, "workers"), where("authUid", "==", authUser.uid));
+        const unsubWorkers = onSnapshot(workersQuery, (snapshot) => {
           const cloudWorkers = [];
           snapshot.forEach((docSnap) => cloudWorkers.push({ id: docSnap.id, ...docSnap.data() }));
           setWorkers(cloudWorkers);
@@ -399,11 +417,7 @@
           setTemplates(cloudTemplates);
         });
 
-        const unsubNotifications = onSnapshot(collection(db, "notifications"), (snapshot) => {
-          const cloudNotifs = [];
-          snapshot.forEach((docSnap) => cloudNotifs.push({ id: docSnap.id, ...docSnap.data() }));
-          setNotifications(cloudNotifs);
-        });
+        // Las notificaciones se cargan por destinatario en otro efecto.
 
         const unsubSettings = onSnapshot(doc(db, "settings", "whatsapp_automation"), (docSnap) => {
           if (docSnap.exists()) {
@@ -415,7 +429,6 @@
           unsubWorkers();
           unsubTags();
           unsubTemplates();
-          unsubNotifications();
           unsubSettings();
         };
       }, [authUser]);
@@ -423,7 +436,7 @@
       useEffect(() => {
         if (!db || !authUser) return;
         const isAdmin = authUser.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
-        const myWorker = workers.find(w => (w.email || '').toLowerCase().trim() === (authUser.email || '').toLowerCase().trim());
+        const myWorker = workers.find(w => w.authUid === authUser.uid);
 
         if (!isAdmin && !myWorker) {
           setMissions([]);
@@ -459,6 +472,11 @@
         progressText = '',
         notes = ''
       }) => {
+        if (IS_TEST_GITHUB) {
+          console.info('TEST: envío WhatsApp omitido para evitar avisos a clientes reales.');
+          showToast('🧪 TEST: WhatsApp bloqueado; los cambios en Firestore siguen siendo REALES.');
+          return;
+        }
         if (!mission || !automationSettings.enabled) return;
 
         const rawPhone = mission.clientPhone || mission.clientContact || '';
@@ -491,6 +509,7 @@
 
         const payload = {
           id: queueId,
+          missionId: mission.id,
           timestamp: now,
           isoDate: new Date(now).toISOString(),
           eventType,
@@ -541,6 +560,10 @@
       };
 
       const handleTestMakeWebhook = async () => {
+        if (IS_TEST_GITHUB) {
+          showToast('🧪 TEST: webhook desactivado para no enviar WhatsApp a números reales.');
+          return;
+        }
         if (!automationSettings.makeWebhookUrl || !automationSettings.makeWebhookUrl.startsWith('http')) {
           showToast('⚠️ Pega primero la URL del Webhook de Make.com');
           return;
@@ -576,10 +599,28 @@
       };
 
       const isCreatorSession = authUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      const currentIsolatedWorker = workers.find(w => w.email?.toLowerCase() === authUser?.email?.toLowerCase()) || null;
+      const currentIsolatedWorker = workers.find(w => w.authUid === authUser?.uid) || null;
       const isolatedWorkerId = currentIsolatedWorker ? currentIsolatedWorker.id : null;
 
       const currentRecipientKey = isCreatorSession ? 'creator' : (isolatedWorkerId || null);
+
+      // Un administrador lee su canal; un mercenario solamente el suyo.
+      useEffect(() => {
+        if (!db || !authUser || !currentRecipientKey) {
+          setNotifications([]);
+          return;
+        }
+        const ownNotifQuery = query(
+          collection(db, "notifications"),
+          where("recipient", "==", currentRecipientKey)
+        );
+        const unsubscribe = onSnapshot(ownNotifQuery, (snapshot) => {
+          const cloudNotifs = [];
+          snapshot.forEach((docSnap) => cloudNotifs.push({ id: docSnap.id, ...docSnap.data() }));
+          setNotifications(cloudNotifs);
+        }, (error) => console.error('Error en notificaciones privadas:', error));
+        return () => unsubscribe();
+      }, [authUser, currentRecipientKey]);
 
       const myNotifications = useMemo(() => {
         if (!currentRecipientKey) return [];
@@ -628,7 +669,7 @@
         }
       }, [myNotifications, currentRecipientKey, soundEnabled, notifications.length]);
 
-      const pushCloudNotification = async ({ recipient, title, message, eventType = 'info', missionTitle = '', clientName = '' }) => {
+      const pushCloudNotification = async ({ recipient, title, message, eventType = 'info', missionTitle = '', clientName = '', missionId = null }) => {
         if (!db || !recipient) return;
         const now = Date.now();
         const notifId = `notif-${now}-${Math.random().toString(36).slice(2, 7)}`;
@@ -640,6 +681,8 @@
           eventType,
           missionTitle,
           clientName,
+          actorWorkerId: !isCreatorSession ? isolatedWorkerId : null,
+          missionId,
           read: false,
           createdAt: now
         };
@@ -1475,6 +1518,7 @@
               const workerName = currentIsolatedWorker?.name || 'Mercenario';
               await pushCloudNotification({
                 recipient: 'creator',
+                missionId: mission.id,
                 title: `☑️ Avance de ${workerName} (${doneCount}/${updatedList.length})`,
                 message: `${workerName} completó el paso "${toggledItem.text}" en "${mission.missionTitle}" (Cliente: ${mission.clientName}).`,
                 eventType: 'started',
@@ -1744,6 +1788,7 @@
           const workerName = currentIsolatedWorker?.name || 'Un mercenario';
           await pushCloudNotification({
             recipient: 'creator',
+            missionId: mission.id,
             title: isResuming ? `▶️ ${workerName} reanudó la misión` : `⚡ ${workerName} empezó una misión`,
             message: isResuming
               ? `${workerName} ha vuelto a entrar a la cuenta de ${mission.clientName} para continuar "${mission.missionTitle}".`
@@ -1779,6 +1824,7 @@
           const workerName = currentIsolatedWorker?.name || 'Un mercenario';
           await pushCloudNotification({
             recipient: 'creator',
+            missionId: mission.id,
             title: `⏸️ Misión Pausada (${mission.clientName} puede entrar)`,
             message: `${workerName} ha pausado "${mission.missionTitle}". Cuenta libre para el cliente ${mission.clientName}. (Tiempo trabajado: ${formatDuration(newAccumulated)}).`,
             eventType: 'status_changed',
@@ -1832,6 +1878,7 @@
           const workerName = currentIsolatedWorker?.name || 'Un mercenario';
           await pushCloudNotification({
             recipient: 'creator',
+            missionId: completingMission.id,
             title: `✅ ¡${workerName} completó una misión!`,
             message: `${workerName} ha finalizado "${completingMission.missionTitle}" (Cliente: ${completingMission.clientName} • Contraseña destruida por seguridad).`,
             eventType: 'completed',
@@ -3478,3 +3525,4 @@
   </script>
 </body>
 </html>
+
