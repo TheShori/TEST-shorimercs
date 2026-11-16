@@ -62,6 +62,8 @@
     import { initializeApp } from "firebase/app";
     import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, where } from "firebase/firestore";
     import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+    // WHATSAPP_CENTER_1D7: UI separada, sin escrituras.
+    import { WhatsAppCenter } from './whatsapp-center-ui.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyA-MMvUt9IvYSHwcFbC0M3K9PdXtlf2gZU",
@@ -2583,6 +2585,7 @@
                   <button onClick={() => setCreatorTab('ranking')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'ranking' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏆 Top Ventas y Clientes</button>
                   <button onClick={() => setCreatorTab('tags')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'tags' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏷️ Etiquetas ({tags.length})</button>
                   <button onClick={() => setCreatorTab('finances')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'finances' ? 'bg-emerald-600 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>💶 Finanzas Mensuales</button>
+                  {IS_TEST_GITHUB && <button onClick={() => setCreatorTab('whatsappCenter')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'whatsappCenter' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>📨 Centro WhatsApp</button>}
                   <button onClick={() => setCreatorTab('workers')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center justify-center gap-1.5 ${creatorTab === 'workers' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
                     <span>👥 Gestión de Mercs</span>
                     {totalPendingAllWorkersUSD > 0 && (
@@ -2593,7 +2596,11 @@
                   </button>
                 </div>
 
-                {creatorTab === 'ranking' ? (
+                {creatorTab === 'whatsappCenter' && IS_TEST_GITHUB ? (
+
+                  <WhatsAppCenter authUser={authUser} />
+
+                ) : creatorTab === 'ranking' ? (
                   <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4">
                       <div>
