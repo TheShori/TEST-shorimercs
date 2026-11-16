@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GestiónMercenarios — Ensayo remoto GitHub TEST</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+body{font:16px system-ui,sans-serif;background:#070d1e;color:#edf2ff;padding:28px;margin:0}
+main{max-width:690px;margin:auto;background:#121e35;border:1px solid #31425c;border-radius:18px;padding:28px}
+h1{font-size:24px;margin:0}p{line-height:1.5}.note{color:#ffcb80}
+label{display:block;margin:18px 0 6px;font-weight:600}input,select{width:100%;box-sizing:border-box;background:#081326;color:white;border:1px solid #4a5b76;border-radius:8px;padding:12px}
+button{margin-top:18px;background:#5865e5;color:#fff;border:0;border-radius:9px;font-size:15px;font-weight:700;padding:13px 18px;cursor:pointer}button:disabled{opacity:.5}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#071122;padding:18px;border-radius:10px;min-height:2em;border:1px solid #34425b}
+small{color:#b6c7e5}
+</style></head><body><main>
+<h1>🔐 GestiónMercenarios — Ensayo remoto TEST</h1>
+<p class="note"><strong>SIN ENVIAR WhatsApp ni modificar Firestore.</strong> Esta página sirve solo para probar desde GitHub TEST la previsualización autenticada de Node.js.</p>
+<p>La contraseña se procesa con el SDK de Firebase en el navegador; Node.js recibe un token de Firebase, nunca la contraseña.</p>
+<form id="f">
+<label for="url">URL de Cloudflare ACTUAL de tu propio servidor (sin /send)</label>
+<input id="url" type="url" placeholder="https://tu-tunel.trycloudflare.com" required autocomplete="off">
+<small>Usa exclusivamente la dirección que aparece en TU consola de Cloudflare. No se guarda en la página.</small>
+<label for="email">Correo de Firebase</label><input id="email" type="email" required autocomplete="username">
+<label for="password">Contraseña Firebase</label><input id="password" type="password" required autocomplete="current-password">
+<label for="mission">ID de misión</label><input id="mission" pattern="mission-[0-9]{7,20}" placeholder="mission-..." required>
+<label for="event">Evento de solo previsualización</label>
+<select id="event"><option value="mission_started">Inicio</option><option value="mission_paused">Pausa</option><option value="mission_resumed">Reanudación</option><option value="mission_completed">Completada</option><option value="checklist_step">Subtarea completada</option></select>
+<label for="step">ID subtarea (si seleccionas checklist)</label><input id="step" placeholder="chk-...">
+<button id="submit" type="submit">Verificar y previsualizar (SIN ENVIAR)</button>
+</form><h2>Resultado</h2><pre id="result">Sin ejecutar</pre>
+</main><script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth,signInWithEmailAndPassword,signOut,setPersistence,inMemoryPersistence} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+// Configuración PÚBLICA de Firebase; NO introducir tokens secretos ni credenciales administrativas aquí.
+const firebaseConfig={apiKey:'AIzaSyA-MMvUt9IvYSHwcFbC0M3K9PdXtlf2gZU',authDomain:'gestionmercenarios.firebaseapp.com',projectId:'gestionmercenarios',appId:'1:534795985470:web:ba5715acfbb4114806676f'};
+const auth=getAuth(initializeApp(firebaseConfig));
+const el=id=>document.getElementById(id);
+const isTest = location.hostname==='theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/');
+if (!isTest) { el('result').textContent='Página solo habilitada desde GitHub TEST.'; el('submit').disabled=true; }
+el('f').addEventListener('submit',async e=>{
+ e.preventDefault();if(!isTest)return;
+ const btn=el('submit');btn.disabled=true;el('result').textContent='Verificando permisos...';
+ try {
+  const url=new URL(el('url').value.trim());
+  if(url.protocol!=='https:' || !url.hostname.endsWith('.trycloudflare.com') || url.username || url.password || url.port || url.pathname!=='/' || url.search || url.hash) throw new Error('Introduce solo la URL HTTPS de tu propio túnel trycloudflare.com, sin /send ni rutas.');
+  await setPersistence(auth,inMemoryPersistence);
+  const cred=await signInWithEmailAndPassword(auth,el('email').value.trim(),el('password').value);
+  el('password').value='';
+  const token=await cred.user.getIdToken();
+  const payload={missionId:el('mission').value.trim(),eventType:el('event').value};
+  if(payload.eventType==='checklist_step')payload.checklistItemId=el('step').value.trim();
+  const r=await fetch(url.origin+'/api/events/preview',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)});
+  const data=await r.json();
+  el('result').textContent='HTTP '+r.status+'\n'+JSON.stringify(data,null,2);
+ } catch(err) {el('result').textContent='Error: '+(err.code||err.message||'No se pudo completar la prueba');}
+ finally {try{await signOut(auth);}catch{}btn.disabled=false;el('password').value='';}
+});
+</script></body></html>
