@@ -1,4 +1,4 @@
-// GestiónMercenarios 1D.7 — módulo visual para GitHub TEST (ES module sin JSX).
+// GestiónMercenarios 1D.7 — Centro WhatsApp en Synology NAS, GitHub TEST (18/11/2026).
 // Solo consulta al backend con Firebase ID token. No envía WhatsApp ni escribe datos.
 import React, { useMemo, useState } from 'react';
 const h = React.createElement;
@@ -10,11 +10,15 @@ const TYPES = {
   mission_completed: 'Misión completada',
   checklist_step: 'Subtarea completada'
 };
+const NAS_ORIGIN = 'https://najovisunas.synology.me:18443';
 function verifyOrigin(value) {
-  const url = new URL(String(value || '').trim());
-  if (url.protocol !== 'https:' || !/^[a-z0-9-]+\.trycloudflare\.com$/i.test(url.hostname) ||
-      url.username || url.password || url.port || (url.pathname !== '/' && url.pathname !== '') ||
-      url.search || url.hash) throw new Error('Pega solo la URL HTTPS de tu propio túnel trycloudflare.com, sin /send.');
+  let url;
+  try { url = new URL(String(value || '').trim()); }
+  catch (_) { throw new Error('Usa la dirección HTTPS del NAS: '+NAS_ORIGIN+', sin /send.'); }
+  if (url.origin !== NAS_ORIGIN || url.username || url.password ||
+      (url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
+    throw new Error('Usa la dirección HTTPS del NAS: '+NAS_ORIGIN+', sin /send.');
+  }
   return url.origin;
 }
 function dateLabel(value) {
@@ -39,7 +43,7 @@ function Metric({ caption, value, note, color='white' }) {
 }
 export function WhatsAppCenter({ authUser }) {
   const onTest = location.hostname === TEST_HOST && location.pathname.startsWith('/TEST-shorimercs/');
-  const [url, setUrl] = useState(() => { try { return sessionStorage.getItem('gm-test-whatsapp-url') || ''; } catch (_) {return '';} });
+  const [url, setUrl] = useState(() => { try { return verifyOrigin(sessionStorage.getItem('gm-test-whatsapp-url') || NAS_ORIGIN); } catch (_) {return NAS_ORIGIN;} });
   const [busy,setBusy] = useState(false);
   const [err,setErr] = useState('');
   const [snapshot,setSnapshot] = useState(null);
@@ -71,7 +75,7 @@ export function WhatsAppCenter({ authUser }) {
       try { sessionStorage.setItem('gm-test-whatsapp-url',origin); } catch (_) {}
     } catch (e) {
       setSnapshot(null);
-      setErr(e.name === 'AbortError' ? 'El servidor no responde. Comprueba que Node.js y Cloudflare siguen activos.' : (e.message || 'Error de conexión'));
+      setErr(e.name === 'AbortError' ? 'El servidor no responde. Comprueba la conexión y el contenedor whatsapp-local en el NAS.' : (e.message || 'Error de conexión'));
     } finally { clearTimeout(timer); setBusy(false); }
   }
   const entries = useMemo(() => {
@@ -93,13 +97,13 @@ export function WhatsAppCenter({ authUser }) {
       h('p',{className:'text-xs leading-relaxed text-slate-300'},'Los cambios de misión observados y los envíos aceptados por Baileys son historiales distintos. No confirman entregas al cliente, ni permiten atribuir un cambio a un mercenario.'),
       h('div',{className:'grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 pt-2'},
         h('label',{className:'text-xs font-semibold text-slate-400 space-y-1'},
-          h('span',null,'URL de TU túnel Cloudflare actual (sin /send)'),
-          h('input',{type:'url',value:url,autoComplete:'off',placeholder:'https://tu-tunel.trycloudflare.com',
+          h('span',null,'URL del servidor WhatsApp en el NAS (sin /send)'),
+          h('input',{type:'url',value:url,autoComplete:'off',placeholder:NAS_ORIGIN,
             onChange:e=>setUrl(e.target.value),className:'w-full rounded-xl bg-slate-950 border border-slate-700 px-3 py-2.5 text-white outline-none focus:border-indigo-400'})),
         h('button',{type:'button',disabled:busy||!url.trim()||!onTest,onClick:load,
           className:'rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2.5 text-xs font-extrabold self-end'},
           busy?'Consultando...':'↻ Actualizar historial')),
-      h('p',{className:'text-[11px] text-amber-300'},'Introduce únicamente la dirección que te muestra TU ventana de Cloudflare. El token Firebase nunca se guarda en la página.'),
+      h('p',{className:'text-[11px] text-amber-300'},'Servidor configurado: Synology NAS. La consulta utiliza tu sesión de Firebase; no necesitas introducir la clave de Make.'),
       lastFetch ? h('p',{className:'text-[11px] text-slate-500'},'Última consulta: '+dateLabel(lastFetch)) : null,
       err ? h('div',{role:'alert',className:'rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs p-3'},err) : null),
     snapshot ? h(React.Fragment,null,
@@ -118,7 +122,7 @@ export function WhatsAppCenter({ authUser }) {
             h('option',{value:'ALL'},'Todos los eventos'),...Object.entries(TYPES).map(([id,name])=>h('option',{key:id,value:id},name))) : null,
           source==='audit' ? h('input',{type:'search',value:missionFilter,onChange:e=>setMissionFilter(e.target.value),placeholder:'Filtrar referencia de misión',
             className:'bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs min-w-[190px]'}) : null),
-        h('p',{className:'text-xs '+tone(entrySource?.status)},entrySource?.status==='unavailable' ? 'Registro no disponible. Comprueba el archivo local en Windows.' : entrySource?.status==='empty' ? 'Sin eventos registrados todavía.' :
+        h('p',{className:'text-xs '+tone(entrySource?.status)},entrySource?.status==='unavailable' ? 'Registro no disponible. Comprueba el archivo de datos en el NAS.' : entrySource?.status==='empty' ? 'Sin eventos registrados todavía.' :
           'Mostrando '+entries.length+' registros recientes. Identificadores anonimizados.'),
         entries.length ? h('div',{className:'space-y-2 max-h-[560px] overflow-y-auto'},...entries.map((record,i)=>
           h('div',{key:record.ref+'-'+i,className:'flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3'},
@@ -134,7 +138,7 @@ export function WhatsAppCenter({ authUser }) {
         'El registro de envíos solo incluye operaciones con ID guardado durante la retención del servidor. ',
         'Ninguna acción de este panel envía WhatsApp ni modifica Firestore.')) :
       !err ? h('div',{className:'rounded-xl border border-dashed border-slate-700 p-8 text-sm text-slate-400 text-center'},
-        'Introduce la URL actual de tu túnel y pulsa “Actualizar historial” para cargar los datos reales. Si aún no existe audit-events.jsonl, aparecerá un historial vacío.') : null
+        'Pulsa “Actualizar historial” para consultar el servidor del NAS. Si aún no existe audit-events.jsonl, aparecerá un historial vacío.') : null
   );
 }
 export { verifyOrigin };
