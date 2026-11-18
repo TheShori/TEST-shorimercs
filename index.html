@@ -40,7 +40,7 @@
 <body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
   <div id="root"></div>
   <div id="gmerc-test-warning" style="display:none;position:fixed;left:10px;bottom:10px;z-index:9999;max-width:460px;padding:10px 14px;border-radius:10px;background:#7c2d12;color:#fff;font:600 12px/1.4 system-ui;box-shadow:0 6px 18px #0009;pointer-events:none">
-    🧪 WEB TEST — FIRESTORE REAL COMPARTIDO: cambios en misiones/pagos son reales. WhatsApp y sus ajustes están bloqueados aquí.
+    🧪 R1 TEST — Encargos reales: SOLO LECTURA. Formulario integrado: datos ficticios en espacio separado. SIN WHATSAPP.
   </div>
   <script>
     if (location.hostname === 'theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/')) {
@@ -64,6 +64,8 @@
     import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
     // WHATSAPP_CENTER_1D7: UI separada, sin escrituras.
     import { WhatsAppCenter } from './whatsapp-center-ui.js';
+    // R1_INTEGRATION_TEST: formularios existentes; almacenamiento separado.
+    import { useMissionR1, R1IntegrationBar, R1CredentialCard } from './r1-integration-ui.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyA-MMvUt9IvYSHwcFbC0M3K9PdXtlf2gZU",
@@ -296,7 +298,7 @@
       const systemCurrentMonth = useMemo(() => getCurrentMonthYear(), []);
 
       const [workers, setWorkers] = useState([]);
-      const [missions, setMissions] = useState([]);
+      const [legacyMissions, setMissions] = useState([]);
       const [tags, setTags] = useState([]);
       const [templates, setTemplates] = useState([]);
       const [notifications, setNotifications] = useState([]);
@@ -385,10 +387,34 @@
         name: '', email: '', specialty: '', color: WORKER_COLOR_OPTIONS[0].id
       });
 
+      const r1 = useMissionR1(authUser, IS_TEST_GITHUB);
+      const missions = useMemo(() => [...legacyMissions, ...r1.missions], [legacyMissions, r1.missions]);
+      const [r1CredentialMode, setR1CredentialMode] = useState('keep');
+      useEffect(() => {
+        if (!IS_TEST_GITHUB || !isMissionModalOpen) return;
+        setR1CredentialMode(editingMission ? 'keep' : 'replace');
+        setMissionForm(prev => editingMission ? { ...prev, accountUser: '', accountPass: '' } : {
+          ...prev, clientName: 'Cliente de Prueba', clientPhone: '', clientContact: '',
+          accountUser: 'r1-test@example.invalid', accountPass: 'FICTICIA-R1-A', priceTotalEUR: '0', workerPayUSD: '0'
+        });
+      }, [isMissionModalOpen, editingMission?.id]);
+      useEffect(() => {
+        if (!IS_TEST_GITHUB || !r1.result || !['create','edit'].includes(r1.result.action)) return;
+        if (['committed_test','duplicate','no_change'].includes(r1.result.status)) {
+          setIsMissionModalOpen(false); setMissionForm(prev=>({...prev,accountUser:'',accountPass:''}));
+        }
+      }, [r1.result]);
+
       useEffect(() => {
         if (!auth) return;
         const unsubscribe = onAuthStateChanged(auth, (user) => {
           setAuthUser(user);
+          // R1: no conservar formularios/credenciales de una sesión anterior.
+          if (IS_TEST_GITHUB) {
+            setIsMissionModalOpen(false); setEditingMission(null); setCompletingMission(null);
+            setMissionForm(prev => ({ ...prev, accountUser: '', accountPass: '' }));
+            setShowAllCreatorPasswords(false); setVisibleCredentials({});
+          }
           setIsAuthChecking(false);
           knownNotifIdsRef.current = new Set();
           initialNotifLoadDoneRef.current = false;
@@ -686,6 +712,7 @@
       }, [myNotifications, currentRecipientKey, soundEnabled, notifications.length]);
 
       const pushCloudNotification = async ({ recipient, title, message, eventType = 'info', missionTitle = '', clientName = '', missionId = null }) => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: las notificaciones comerciales no se escriben desde esta integración.'); return; }
         if (!db || !recipient) return;
         const now = Date.now();
         const notifId = `notif-${now}-${Math.random().toString(36).slice(2, 7)}`;
@@ -710,6 +737,7 @@
       };
 
       const handleMarkNotifAsRead = async (notif) => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!db || notif.read) return;
         try {
           await setDoc(doc(db, "notifications", notif.id), { read: true }, { merge: true });
@@ -717,6 +745,7 @@
       };
 
       const handleMarkAllNotifsAsRead = async () => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!db) return;
         const unread = myNotifications.filter(n => !n.read);
         for (const n of unread) {
@@ -728,6 +757,7 @@
       };
 
       const handleClearAllMyNotifications = async () => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!db) return;
         for (const n of myNotifications) {
           try {
@@ -1085,7 +1115,7 @@
               clientPhone: phoneVal,
               clientContact: phoneVal,
               accountUser: m.accountUser || '',
-              accountPass: decryptPassword(m.accountPass) || '',
+              accountPass: IS_TEST_GITHUB ? '' : (decryptPassword(m.accountPass) || ''),
               loginMethod: m.loginMethod || 'Kabam ID',
               paymentMethod: getMissionPaymentMethod(m),
               workerId: m.workerId || 'unassigned',
@@ -1099,7 +1129,7 @@
             if (!existing.clientPhone && phoneVal) existing.clientPhone = phoneVal;
             if (!existing.clientContact && phoneVal) existing.clientContact = phoneVal;
             if (!existing.accountUser && m.accountUser) existing.accountUser = m.accountUser;
-            if (!existing.accountPass && m.accountPass) existing.accountPass = decryptPassword(m.accountPass);
+            if (!IS_TEST_GITHUB && !existing.accountPass && m.accountPass) existing.accountPass = decryptPassword(m.accountPass);
             if (!existing.loginMethod && m.loginMethod) existing.loginMethod = m.loginMethod;
           }
         });
@@ -1129,7 +1159,7 @@
           clientContact: savedPhone || prev.clientContact,
           loginMethod: clientData.loginMethod || prev.loginMethod || 'Kabam ID',
           accountUser: clientData.accountUser || prev.accountUser,
-          accountPass: clientData.accountPass || prev.accountPass,
+          accountPass: IS_TEST_GITHUB ? prev.accountPass : (clientData.accountPass || prev.accountPass),
           paymentMethod: clientData.paymentMethod || prev.paymentMethod || 'Bizum'
         }));
         setShowClientSuggestions(false);
@@ -1229,7 +1259,7 @@
               clientPhone: phoneVal,
               clientContact: phoneVal,
               accountUser: m.accountUser || '',
-              accountPass: decryptPassword(m.accountPass) || '',
+              accountPass: IS_TEST_GITHUB ? '' : (decryptPassword(m.accountPass) || ''),
               loginMethod: m.loginMethod || 'Kabam ID',
               paymentMethod: getMissionPaymentMethod(m),
               count: 0,
@@ -1245,7 +1275,7 @@
           item.revenueEUR += rev;
           item.workerCostUSD += costUSD;
           if (!item.accountUser && m.accountUser) item.accountUser = m.accountUser;
-          if (!item.accountPass && m.accountPass) item.accountPass = decryptPassword(m.accountPass);
+          if (!IS_TEST_GITHUB && !item.accountPass && m.accountPass) item.accountPass = decryptPassword(m.accountPass);
           if (!item.clientPhone && phoneVal) item.clientPhone = phoneVal;
           if (!item.clientContact && phoneVal) item.clientContact = phoneVal;
         });
@@ -1322,6 +1352,7 @@
       };
 
       const handleSaveAsTemplate = async () => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!missionForm.missionTitle.trim()) {
           showToast('⚠️ Pon un título a la misión para guardarla como plantilla');
           return;
@@ -1377,6 +1408,7 @@
       };
 
       const handleDeleteTemplate = async (tplId) => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!db) return;
         try {
           await deleteDoc(doc(db, "mission_templates", tplId));
@@ -1397,6 +1429,7 @@
       });
 
       const handleSaveManualTemplate = async (e) => {
+        if (IS_TEST_GITHUB) { e.preventDefault(); showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         e.preventDefault();
         const cleanName = (templateForm.name || templateForm.missionTitle || '').trim();
         if (!cleanName) { showToast('⚠️ Escribe un nombre o título para la plantilla'); return; }
@@ -1437,6 +1470,7 @@
       };
 
       const handleSaveTag = async (e) => {
+        if (IS_TEST_GITHUB) { e.preventDefault(); showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         e.preventDefault();
         const cleanName = tagForm.name.trim();
         if (!cleanName) { showToast('⚠️ Escribe un nombre para la etiqueta'); return; }
@@ -1454,6 +1488,7 @@
       };
 
       const handleQuickCreateTagInModal = async () => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         const cleanName = quickTagName.trim();
         if (!cleanName) return;
         const newId = `tag-${Date.now()}`;
@@ -1464,6 +1499,7 @@
       };
 
       const handleDeleteTag = async () => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!tagToDelete) return;
         if (db) {
           await deleteDoc(doc(db, "tags", tagToDelete.id));
@@ -1512,6 +1548,12 @@
       };
 
       const handleToggleMissionChecklistItem = async (mission, itemId) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('checklist', mission, { itemId, done: !getMissionChecklist(mission).find(item => item.id === itemId)?.done });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         if (!db) return;
         const currentList = getMissionChecklist(mission);
         let toggledItem = null;
@@ -1558,6 +1600,7 @@
       };
 
       const handleLiquidateWorker = async (workerId) => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         const worker = workers.find(w => w.id === workerId);
         if (!worker) return;
 
@@ -1598,6 +1641,17 @@
             done: false
           });
           setNewChecklistItemText('');
+        }
+
+        if (IS_TEST_GITHUB) {
+          if (editingMission && !r1.isManaged(editingMission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try {
+            await r1.save(editingMission, missionForm, finalChecklist, r1CredentialMode);
+            setMissionForm(prev=>({...prev,accountUser:'',accountPass:''}));
+            setIsMissionModalOpen(false);
+            showToast('✅ Misión TEST guardada por Node.js; sin WhatsApp.');
+          } catch (error) { showToast(error.message || '⚠️ No se confirma el guardado. Revisa el aviso R1 superior.'); }
+          return;
         }
 
         const rawPhoneInput = (missionForm.clientPhone || missionForm.clientContact || '').trim();
@@ -1687,6 +1741,12 @@
       };
 
       const handleQuickWorkerReassign = async (mission, newWorkerId) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('reassign', mission, { workerId: newWorkerId });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         if (!db) return;
         const oldWorkerId = mission.workerId || 'unassigned';
         if (oldWorkerId === newWorkerId) return;
@@ -1730,6 +1790,12 @@
       };
 
       const handleCreatorQuickStatusChange = async (mission, newStatus) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('status', mission, { status: newStatus, completionNotes: '' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         if (!db || mission.status === newStatus) return;
         const now = Date.now();
         let accumulated = Number(mission.accumulatedWorkMs) || 0;
@@ -1780,6 +1846,12 @@
       };
 
       const handleQuickTogglePaymentMethod = async (mission) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('payment', mission, { paymentMethod: getMissionPaymentMethod(mission) === 'PayPal' ? 'Bizum' : 'PayPal' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         if (!db) return;
         const currentMethod = getMissionPaymentMethod(mission);
         const nextMethod = currentMethod === 'Bizum' ? 'PayPal' : 'Bizum';
@@ -1792,6 +1864,12 @@
       };
 
       const handleStartMission = async (mission) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('status', mission, { status: 'En Progreso' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         const now = Date.now();
         const isResuming = mission.status === 'En Pausa';
         if (db) {
@@ -1824,6 +1902,12 @@
       };
 
       const handlePauseMission = async (mission) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('status', mission, { status: 'En Pausa' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         const now = Date.now();
         const startRef = Number(mission.lastResumedAt || mission.startedAt || now);
         const sessionElapsed = Math.max(0, now - startRef);
@@ -1858,6 +1942,12 @@
       };
 
       const handlePrioritizeMission = async (mission) => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('priority', mission, {});  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         if (!activeWorkerQueue || activeWorkerQueue.length === 0) return;
         const minPrio = Math.min(...activeWorkerQueue.map(m => m.workerPriorityOrder !== undefined ? Number(m.workerPriorityOrder) : 0));
         if (db) { await setDoc(doc(db, "missions", mission.id), { workerPriorityOrder: minPrio - 1 }, { merge: true }); }
@@ -1865,6 +1955,13 @@
       };
 
       const handleConfirmCompleteMission = async (e) => {
+        if (IS_TEST_GITHUB) {
+          e.preventDefault();
+          if (!r1.isManaged(completingMission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('status', completingMission, { status: 'Completada', completionNotes: completionNoteInput.trim() }); setCompletingMission(null); setCompletionNoteInput(''); showToast('✅ Misión TEST completada y credencial retirada. Sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         e.preventDefault();
         if (!completingMission) return;
         const now = Date.now();
@@ -1915,6 +2012,12 @@
       };
 
       const handleDeleteMission = async () => {
+        if (IS_TEST_GITHUB) {
+          if (!r1.isManaged(missionToDelete)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
+          try { await r1.mutate('delete', missionToDelete, {}); setMissionToDelete(null); showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
+          return;
+        }
         if (!missionToDelete) return;
         if (db) {
           const prevWorkerId = missionToDelete.workerId;
@@ -1937,6 +2040,7 @@
       };
 
       const handleSaveWorker = async (e) => {
+        if (IS_TEST_GITHUB) { e.preventDefault(); showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         e.preventDefault();
         if (!workerForm.name.trim() || !workerForm.email.trim()) { showToast('⚠️ Introduce nombre y Correo Firebase'); return; }
         
@@ -1955,6 +2059,7 @@
       };
 
       const handleQuickWorkerColorChange = async (worker, newColorId) => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!db) return;
         try {
           await setDoc(doc(db, "workers", worker.id), { ...worker, color: newColorId }, { merge: true });
@@ -1966,6 +2071,7 @@
       };
 
       const handleDeleteWorker = async () => {
+        if (IS_TEST_GITHUB) { showToast('🧪 TEST: esta acción sobre datos reales está en solo lectura. Se conserva en producción.'); return; }
         if (!workerToDelete) return;
         if (db) {
           await deleteDoc(doc(db, "workers", workerToDelete.id));
@@ -2245,6 +2351,7 @@
 
             {renderMissionChecklistBlock(m)}
 
+            {IS_TEST_GITHUB ? <R1CredentialCard r1={r1} mission={m} /> : (
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>Credenciales ({m.loginMethod || 'Kabam ID'})</span>
@@ -2261,6 +2368,7 @@
                 <button onClick={() => copyToClipboard(decryptPassword(m.accountPass), 'Contraseña')} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 font-bold shrink-0 ml-2">Copiar</button>
               </div>
             </div>
+            )}
 
             {m.instructions && (
               <div className="bg-indigo-950/40 p-3 rounded-xl border border-indigo-500/30 text-xs text-slate-200">
@@ -2399,6 +2507,7 @@
             </div>
           )}
 
+          {IS_TEST_GITHUB && <R1IntegrationBar r1={r1} />}
           <main className="max-w-7xl mx-auto px-4 pt-6">
             {!isCreatorSession ? (
               <div className="max-w-lg mx-auto space-y-4">
@@ -2801,7 +2910,7 @@
                                                 missionTitle: '',
                                                 gameCategory: 'Exploración de Actos',
                                                 accountUser: client.accountUser || '',
-                                                accountPass: client.accountPass || '',
+                                                accountPass: IS_TEST_GITHUB ? '' : (client.accountPass || ''),
                                                 loginMethod: client.loginMethod || 'Kabam ID',
                                                 instructions: '',
                                                 priority: 'Normal',
@@ -3826,11 +3935,11 @@
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
-                            onClick={() => setShowAllCreatorPasswords(!showAllCreatorPasswords)}
+                            onClick={() => IS_TEST_GITHUB ? r1.clearSecrets() : setShowAllCreatorPasswords(!showAllCreatorPasswords)}
                             className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5"
                           >
                             {showAllCreatorPasswords ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-indigo-400" />}
-                            {showAllCreatorPasswords ? 'Ocultar Claves' : 'Ver Claves'}
+                            {IS_TEST_GITHUB ? 'Ocultar credenciales TEST' : (showAllCreatorPasswords ? 'Ocultar Claves' : 'Ver Claves')}
                           </button>
                           <button
                             type="button"
@@ -3903,6 +4012,7 @@
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={() => {
+                                      if (IS_TEST_GITHUB && !r1.isManaged(m)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
                                       setEditingMission(m);
                                       setNewChecklistItemText('');
                                       setMissionForm({
@@ -3912,7 +4022,7 @@
                                         missionTitle: m.missionTitle || '',
                                         gameCategory: m.gameCategory || 'Exploración de Actos',
                                         accountUser: m.accountUser || '',
-                                        accountPass: decryptPassword(m.accountPass) || '',
+                                        accountPass: IS_TEST_GITHUB ? '' : (decryptPassword(m.accountPass) || ''),
                                         loginMethod: m.loginMethod || 'Kabam ID',
                                         instructions: m.instructions || '',
                                         priority: m.priority || 'Normal',
@@ -3962,6 +4072,7 @@
                                 <>
                                   {renderMissionChecklistBlock(m)}
 
+                                  {IS_TEST_GITHUB ? <R1CredentialCard r1={r1} mission={m} /> : (
                                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2 text-xs">
                                     <div className="flex items-center justify-between text-slate-400">
                                       <span>Acceso ({m.loginMethod || 'Kabam ID'})</span>
@@ -3980,6 +4091,7 @@
                                       </div>
                                     </div>
                                   </div>
+                                  )}
 
                                   {m.instructions && (
                                     <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-xl p-2.5 text-xs text-slate-300">
@@ -4071,6 +4183,18 @@
                 )}
 
                 <form onSubmit={handleSaveMission} className="space-y-4 text-xs">
+                  {IS_TEST_GITHUB && <div className="rounded-xl bg-amber-950/30 border border-amber-500/40 p-3 text-xs text-amber-200 space-y-2">
+                    <strong>Integración TEST · formulario habitual · sin clientes reales</strong>
+                    <p>Nombre: Cliente de Prueba. Teléfono vacío. Importes: 0. Usuario: r1-test@example.invalid. Contraseña: FICTICIA-R1-A o FICTICIA-R1-B.</p>
+                    <p>Guardar llama a Node.js y escribe solo en gm_r1_integration/test. Editar no recupera la contraseña antigua.</p>
+                    <label className="block font-bold">Acción sobre la credencial
+                      <select aria-label="Acción sobre credencial R1" value={r1CredentialMode} onChange={e=>{setR1CredentialMode(e.target.value); setMissionForm(prev=>({...prev,accountUser:e.target.value==='replace'?'r1-test@example.invalid':'',accountPass:''}));}} className="block w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg p-2">
+                        <option value="keep">{editingMission ? 'Conservar sin tocar' : 'Crear sin credencial'}</option>
+                        <option value="replace" disabled={editingMission?.status==='Completada'}>Sustituir / guardar dato ficticio</option>
+                        <option value="remove">Retirar credencial</option>
+                      </select>
+                    </label>
+                  </div>}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="relative">
                       <label className="block font-bold text-slate-300 mb-1">Nombre del Cliente *</label>
@@ -4159,6 +4283,8 @@
                       <label className="block font-bold text-slate-400 mb-1">Correo / Usuario Juego</label>
                       <input
                         type="text"
+                        disabled={IS_TEST_GITHUB && r1CredentialMode !== 'replace'}
+                        autoComplete="off"
                         value={missionForm.accountUser}
                         onChange={(e) => setMissionForm({ ...missionForm, accountUser: e.target.value })}
                         placeholder="correo@juego.com"
@@ -4169,6 +4295,8 @@
                       <label className="block font-bold text-slate-400 mb-1">Contraseña Juego</label>
                       <input
                         type="password"
+                        disabled={IS_TEST_GITHUB && r1CredentialMode !== 'replace'}
+                        autoComplete="new-password"
                         value={missionForm.accountPass}
                         onChange={(e) => setMissionForm({ ...missionForm, accountPass: e.target.value })}
                         placeholder="Contraseña..."
@@ -4306,7 +4434,7 @@
                     </button>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={() => setIsMissionModalOpen(false)} className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold">Cancelar</button>
-                      <button type="submit" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold shadow-lg shadow-indigo-600/30">
+                      <button type="submit" disabled={IS_TEST_GITHUB && (r1.busy || r1.pending || !r1.connected)} className="disabled:opacity-40 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold shadow-lg shadow-indigo-600/30">
                         {editingMission ? 'Guardar Cambios' : 'Registrar Misión'}
                       </button>
                     </div>
@@ -4376,7 +4504,7 @@
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Finalizar "{completingMission.missionTitle}"
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Al confirmar, se avisará automáticamente al cliente por WhatsApp y la contraseña se destruirá de la base de datos por seguridad.
+                  {IS_TEST_GITHUB ? 'Se completará únicamente la misión TEST y se retirará su credencial protegida. No se envía WhatsApp.' : 'Al confirmar, se avisará automáticamente al cliente por WhatsApp y la contraseña se destruirá de la base de datos por seguridad.'}
                 </p>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1">Nota de finalización (opcional)</label>
@@ -4501,7 +4629,7 @@
     }
 
     const root = createRoot(document.getElementById('root'));
-    root.render(<App />);
+    root.render(IS_TEST_GITHUB ? <App /> : <div style={{padding:32,color:'white'}}>Esta entrega es exclusiva de GitHub TEST. No es la versión de producción R1.</div>);
   </script>
 </body>
 </html>
