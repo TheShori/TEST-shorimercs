@@ -25,10 +25,10 @@ export function useMissionR1(authUser,enabled){
  }
  async function refresh(){try{const g=generation.current;const data=await send({action:'list'});if(data.status!=='listed'||!Array.isArray(data.missions)||data.scope!=='gm_r1_integration/test')throw Error('Formato de respuesta inesperado.');if(g!==generation.current)return;clearSecrets();setMissions(data.missions);setConnected(true);setError('');try{sessionStorage.setItem('gm-test-whatsapp-url',verifyBackend(url));}catch{};return data;}
  catch(e){setError(e.message);setConnected(false);throw e;}}
- async function load(){if(lock.current)return;lock.current=true;setBusy(true);try{await refresh();}catch{}finally{setBusy(false);lock.current=false;}}
+ async function load(){if(lock.current)return;lock.current=true;setBusy(true);setResult(null);try{await refresh();}catch{}finally{setBusy(false);lock.current=false;}}
  async function execute(command){
    if(lock.current)throw Error('Hay otra operación en curso.');if(pendingRef.current&&pendingRef.current.requestId!==command.requestId)throw Error('Primero resuelve la petición pendiente.');
-   lock.current=true;setBusy(true);setError('');const g=generation.current;
+   lock.current=true;setBusy(true);setError('');setResult(null);const g=generation.current;
    try{const data=await send(command);pendingRef.current=null;setPending(false);lastRef.current=command;setResult(data);try{await refresh();}catch{}return data;}
    catch(e){if(g===generation.current){if(e.uncertain){pendingRef.current=command;setPending(true);}else{pendingRef.current=null;setPending(false);}setError(e.message);}throw e;}
    finally{lock.current=false;setBusy(false);}
@@ -52,7 +52,37 @@ export function R1IntegrationBar({r1}){
  r1.error?h('p',{role:'alert',className:'text-xs text-rose-300'},r1.error):null,
  (r1.pending||r1.hasLast)?h('button',{type:'button',disabled:r1.busy,onClick:r1.retry,className:button+' bg-amber-700'},r1.pending?'Repetir misma petición PENDIENTE':'Comprobar repetición de la última petición'):null,
  r1.pending?h('p',{className:'text-xs text-amber-300'},'No prepares otra operación, no cierres sesión ni esta pestaña hasta aclarar el resultado. La petición solo se conserva en memoria.'):null,
- r1.result?h('p',{className:'text-xs text-emerald-300','data-testid':'r1-last-result'},'Resultado: '+r1.result.status+' · revisión '+r1.result.revision+' · SIN WHATSAPP'):null));
+ r1.result?h('p',{className:'text-xs text-emerald-300','data-testid':'r1-last-result'},'Resultado: '+r1.result.status+' · revisión '+r1.result.revision+' · SIN WHATSAPP'):null,
+ h(R1SavedNotice,{result:r1.result})));
+}
+export function checkedNotice(result){
+ if(!result||!['committed_test','duplicate'].includes(result.status)||result.action!=='status'||
+   result.apiVersion!=='status-events-test-v1'||result.willSend!==false||result.commercialWrites!==false||
+   !Number.isSafeInteger(result.revision)||result.revision<1||
+   !/^mission-r1-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(result.missionId||''))return null;
+ const n=result.notice;
+ const states={mission_started:'En Progreso',mission_resumed:'En Progreso',mission_paused:'En Pausa',mission_completed:'Completada'};
+ if(!n||!Object.hasOwn(states,n.type)||n.status!==states[n.type]||
+   !['Pendiente','En Progreso','En Pausa'].includes(n.previousStatus)||n.previousStatus===n.status||
+   n.notForDelivery!==true||n.dispatchStatus!=='blocked_integration_test'||
+   typeof n.id!=='string'||!/^[0-9a-f]{64}$/.test(n.id)||n.id!==result.receiptId||
+   typeof n.message!=='string'||!n.message.trim()||n.message.length>6000)return null;
+ return {message:n.message,previousStatus:n.previousStatus,status:n.status,revision:result.revision,duplicate:result.status==='duplicate'};
+}
+export function R1SavedNotice({result}){
+ const n=checkedNotice(result);
+ if(!n){
+  if(result?.action==='status'&&['committed_test','duplicate'].includes(result.status)&&result.notice){
+   return h('p',{role:'alert',className:'text-xs text-amber-300'},'El cambio tiene respuesta, pero no se ha podido validar el aviso recibido. No repitas el cambio de estado: comparte esta pantalla.');
+  }
+  return null;
+ }
+ return h('section',{'aria-label':'Aviso guardado en TEST','data-testid':'r1-saved-notice',className:'rounded-xl border border-emerald-500/30 bg-slate-950 p-4 space-y-3'},
+  h('h3',{className:'font-bold text-emerald-300'},'Aviso guardado en TEST · Sin envío'),
+  h('p',{className:'text-xs text-slate-300'},n.previousStatus+' → '+n.status+' · revisión '+n.revision),
+  h('pre',{className:'whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-slate-100'},n.message),
+  n.duplicate?h('p',{className:'text-xs text-amber-300'},'Petición repetida: se muestra el aviso original guardado para esta revisión.'):null,
+  h('p',{className:'text-xs text-slate-400'},'Guardado con el cambio de estado. Envío bloqueado en TEST. Se muestra el resultado de esta petición, no un historial.'));
 }
 export function R1CredentialCard({r1,mission}){
  if(!isManaged(mission))return h('div',{className:'rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400'},'Encargo real · solo lectura en esta versión TEST. No se consultan sus credenciales desde R1.');
