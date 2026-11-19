@@ -56,33 +56,40 @@ export function R1IntegrationBar({r1}){
  h(R1SavedNotice,{result:r1.result})));
 }
 export function checkedNotice(result){
- if(!result||!['committed_test','duplicate'].includes(result.status)||result.action!=='status'||
-   result.apiVersion!=='status-events-test-v1'||result.willSend!==false||result.commercialWrites!==false||
+ if(!result||!['committed_test','duplicate'].includes(result.status)||!['status','checklist'].includes(result.action)||
+   !['status-events-test-v1','events-test-v2'].includes(result.apiVersion)||result.willSend!==false||result.commercialWrites!==false||
    !Number.isSafeInteger(result.revision)||result.revision<1||
    !/^mission-r1-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(result.missionId||''))return null;
  const n=result.notice;
  const states={mission_started:'En Progreso',mission_resumed:'En Progreso',mission_paused:'En Pausa',mission_completed:'Completada'};
- if(!n||!Object.hasOwn(states,n.type)||n.status!==states[n.type]||
-   !['Pendiente','En Progreso','En Pausa'].includes(n.previousStatus)||n.previousStatus===n.status||
+ if(!n||
    n.notForDelivery!==true||n.dispatchStatus!=='blocked_integration_test'||
    typeof n.id!=='string'||!/^[0-9a-f]{64}$/.test(n.id)||n.id!==result.receiptId||
    typeof n.message!=='string'||!n.message.trim()||n.message.length>6000)return null;
- return {message:n.message,previousStatus:n.previousStatus,status:n.status,revision:result.revision,duplicate:result.status==='duplicate'};
+ let progress=null;
+ if(result.action==='checklist'){
+   const p=n.progress;
+   if(result.apiVersion!=='events-test-v2'||n.type!=='checklist_step'||n.previousStatus!==n.status||!['Pendiente','En Progreso','En Pausa'].includes(n.status)||
+      !p||typeof p.itemId!=='string'||!/^chk-[A-Za-z0-9_-]{1,100}$/.test(p.itemId)||typeof p.itemText!=='string'||!p.itemText.trim()||p.itemText.length>180||
+      !Number.isSafeInteger(p.done)||!Number.isSafeInteger(p.total)||p.total<1||p.total>50||p.done<1||p.done>p.total||p.percent!==Math.round(p.done/p.total*100))return null;
+   progress={itemText:p.itemText,done:p.done,total:p.total,percent:p.percent};
+ }else if(!Object.hasOwn(states,n.type)||n.status!==states[n.type]||!['Pendiente','En Progreso','En Pausa'].includes(n.previousStatus)||n.previousStatus===n.status)return null;
+ return {message:n.message,previousStatus:n.previousStatus,status:n.status,revision:result.revision,duplicate:result.status==='duplicate',progress};
 }
 export function R1SavedNotice({result}){
  const n=checkedNotice(result);
  if(!n){
-  if(result?.action==='status'&&['committed_test','duplicate'].includes(result.status)&&result.notice){
-   return h('p',{role:'alert',className:'text-xs text-amber-300'},'El cambio tiene respuesta, pero no se ha podido validar el aviso recibido. No repitas el cambio de estado: comparte esta pantalla.');
+  if(['status','checklist'].includes(result?.action)&&['committed_test','duplicate'].includes(result.status)&&result.notice){
+   return h('p',{role:'alert',className:'text-xs text-amber-300'},'El cambio tiene respuesta, pero no se ha podido validar el aviso recibido. No repitas la operación: comparte esta pantalla.');
   }
   return null;
  }
  return h('section',{'aria-label':'Aviso guardado en TEST','data-testid':'r1-saved-notice',className:'rounded-xl border border-emerald-500/30 bg-slate-950 p-4 space-y-3'},
   h('h3',{className:'font-bold text-emerald-300'},'Aviso guardado en TEST · Sin envío'),
-  h('p',{className:'text-xs text-slate-300'},n.previousStatus+' → '+n.status+' · revisión '+n.revision),
+  h('p',{className:'text-xs text-slate-300'},(n.progress?'Subtarea completada · '+n.progress.done+'/'+n.progress.total+' ('+n.progress.percent+'%) · '+n.status:n.previousStatus+' → '+n.status)+' · revisión '+n.revision),
   h('pre',{className:'whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-slate-100'},n.message),
   n.duplicate?h('p',{className:'text-xs text-amber-300'},'Petición repetida: se muestra el aviso original guardado para esta revisión.'):null,
-  h('p',{className:'text-xs text-slate-400'},'Guardado con el cambio de estado. Envío bloqueado en TEST. Se muestra el resultado de esta petición, no un historial.'));
+  h('p',{className:'text-xs text-slate-400'},'Guardado con el cambio de la misión. Envío bloqueado en TEST. Se muestra el resultado de esta petición, no un historial.'));
 }
 export function R1CredentialCard({r1,mission}){
  if(!isManaged(mission))return h('div',{className:'rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400'},'Encargo real · solo lectura en esta versión TEST. No se consultan sus credenciales desde R1.');
