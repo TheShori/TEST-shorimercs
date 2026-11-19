@@ -40,7 +40,7 @@
 <body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
   <div id="root"></div>
   <div id="gmerc-test-warning" style="display:none;position:fixed;left:10px;bottom:10px;z-index:9999;max-width:460px;padding:10px 14px;border-radius:10px;background:#7c2d12;color:#fff;font:600 12px/1.4 system-ui;box-shadow:0 6px 18px #0009;pointer-events:none">
-    🧪 R1 TEST — Encargos reales: SOLO LECTURA. Datos ficticios separados. Piloto de WhatsApp solo al número de Victor; consulta el panel R1.
+    🧪 R1 TEST · Permisos web v1 — Encargos reales: SOLO LECTURA. Datos ficticios separados. Piloto de WhatsApp solo al número de Victor; consulta el panel R1.
   </div>
   <script>
     if (location.hostname === 'theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/')) {
@@ -294,7 +294,33 @@
       return { name: 'Internacional', flag: 'INT' };
     };
 
+    // PERMISOS_WEB_R1_V1: identidad y respuestas ligadas a la sesión actual.
+    function linkedActiveWorker(profiles, user) {
+      if (!user || !user.uid || !user.email) return null;
+      const email = user.email.toLowerCase();
+      if (!['jhonwick@merc.com','shori@merc.com','mandalorian@merc.com','nildead@merc.com'].includes(email)) return null;
+      const matches = profiles.filter(w => w.authUid === user.uid);
+      if (matches.length !== 1) return null;
+      const w = matches[0];
+      return typeof w.id === 'string' && w.id !== '' && w.id !== 'unassigned'
+        && typeof w.email === 'string' && w.email.toLowerCase() === email
+        && w.active !== false && w.disabled !== true ? w : null;
+    }
+    function listenForSession(subscribe, sessionVersion, source, onValue, onError) {
+      const version = sessionVersion.current;
+      let active = true;
+      const current = () => active && version === sessionVersion.current;
+      const unsubscribe = subscribe(source, value => {
+        if (current()) onValue(value);
+      }, error => {
+        if (current()) { active = false; onError(error); }
+      });
+      return () => { active = false; unsubscribe(); };
+    }
+
     function App() {
+      const sessionVersion = useRef(0);
+      const sessionSnapshot = (source, onValue, onError) => listenForSession(onSnapshot, sessionVersion, source, onValue, onError);
       const systemCurrentMonth = useMemo(() => getCurrentMonthYear(), []);
 
       const [workers, setWorkers] = useState([]);
@@ -408,7 +434,10 @@
       useEffect(() => {
         if (!auth) return;
         const unsubscribe = onAuthStateChanged(auth, (user) => {
+          sessionVersion.current += 1;
           setAuthUser(user);
+          setTags([]); setTemplates([]); setLiveBannerAlert(null);
+          setWorkers([]); setMissions([]); setNotifications([]);
           // R1: no conservar formularios/credenciales de una sesión anterior.
           if (IS_TEST_GITHUB) {
             setIsMissionModalOpen(false); setEditingMission(null); setCompletingMission(null);
@@ -430,23 +459,23 @@
         const workersQuery = isAdminForWorkerQuery
           ? collection(db, "workers")
           : query(collection(db, "workers"), where("authUid", "==", authUser.uid));
-        const unsubWorkers = onSnapshot(workersQuery, (snapshot) => {
+        const unsubWorkers = sessionSnapshot(workersQuery, (snapshot) => {
           const cloudWorkers = [];
-          snapshot.forEach((docSnap) => cloudWorkers.push({ id: docSnap.id, ...docSnap.data() }));
+          snapshot.forEach((docSnap) => cloudWorkers.push({ ...docSnap.data(), id: docSnap.id }));
           setWorkers(cloudWorkers);
-        });
+        }, () => { setWorkers([]); setMissions([]); setNotifications([]); });
 
-        const unsubTags = onSnapshot(collection(db, "tags"), (snapshot) => {
+        const unsubTags = sessionSnapshot(collection(db, "tags"), (snapshot) => {
           const cloudTags = [];
-          snapshot.forEach((docSnap) => cloudTags.push({ id: docSnap.id, ...docSnap.data() }));
+          snapshot.forEach((docSnap) => cloudTags.push({ ...docSnap.data(), id: docSnap.id }));
           setTags(cloudTags);
-        });
+        }, () => setTags([]));
 
-        const unsubTemplates = onSnapshot(collection(db, "mission_templates"), (snapshot) => {
+        const unsubTemplates = sessionSnapshot(collection(db, "mission_templates"), (snapshot) => {
           const cloudTemplates = [];
-          snapshot.forEach((docSnap) => cloudTemplates.push({ id: docSnap.id, ...docSnap.data() }));
+          snapshot.forEach((docSnap) => cloudTemplates.push({ ...docSnap.data(), id: docSnap.id }));
           setTemplates(cloudTemplates);
-        });
+        }, () => setTemplates([]));
 
         // Las notificaciones se cargan por destinatario en otro efecto.
 
@@ -454,11 +483,11 @@
         // Producción conserva temporalmente su mecanismo original hasta la migración del servidor.
         let unsubSettings = () => {};
         if (!IS_TEST_GITHUB) {
-          unsubSettings = onSnapshot(doc(db, "settings", "whatsapp_automation"), (docSnap) => {
+          unsubSettings = sessionSnapshot(doc(db, "settings", "whatsapp_automation"), (docSnap) => {
             if (docSnap.exists()) {
               setAutomationSettings(prev => ({ ...prev, ...docSnap.data() }));
             }
-          });
+          }, () => setAutomationSettings(prev => ({ ...prev, enabled: false, makeWebhookUrl: '' })));
         }
 
         return () => {
@@ -472,7 +501,7 @@
       useEffect(() => {
         if (!db || !authUser) return;
         const isAdmin = authUser.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase().trim();
-        const myWorker = workers.find(w => w.authUid === authUser.uid);
+        const myWorker = linkedActiveWorker(workers, authUser);
 
         if (!isAdmin && !myWorker) {
           setMissions([]);
@@ -483,11 +512,11 @@
           ? collection(db, "missions")
           : query(collection(db, "missions"), where("workerId", "==", myWorker.id));
 
-        const unsubMissions = onSnapshot(missionsQuery, (snapshot) => {
+        const unsubMissions = sessionSnapshot(missionsQuery, (snapshot) => {
           const cloudMissions = [];
-          snapshot.forEach((docSnap) => cloudMissions.push({ id: docSnap.id, ...docSnap.data() }));
+          snapshot.forEach((docSnap) => cloudMissions.push({ ...docSnap.data(), id: docSnap.id }));
           setMissions(cloudMissions);
-        });
+        }, () => setMissions([]));
 
         return () => unsubMissions();
       }, [authUser, workers]);
@@ -641,7 +670,7 @@
       };
 
       const isCreatorSession = authUser?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      const currentIsolatedWorker = workers.find(w => w.authUid === authUser?.uid) || null;
+      const currentIsolatedWorker = linkedActiveWorker(workers, authUser);
       const isolatedWorkerId = currentIsolatedWorker ? currentIsolatedWorker.id : null;
 
       const currentRecipientKey = isCreatorSession ? 'creator' : (isolatedWorkerId || null);
@@ -656,11 +685,11 @@
           collection(db, "notifications"),
           where("recipient", "==", currentRecipientKey)
         );
-        const unsubscribe = onSnapshot(ownNotifQuery, (snapshot) => {
+        const unsubscribe = sessionSnapshot(ownNotifQuery, (snapshot) => {
           const cloudNotifs = [];
-          snapshot.forEach((docSnap) => cloudNotifs.push({ id: docSnap.id, ...docSnap.data() }));
+          snapshot.forEach((docSnap) => cloudNotifs.push({ ...docSnap.data(), id: docSnap.id }));
           setNotifications(cloudNotifs);
-        }, (error) => console.error('Error en notificaciones privadas:', error));
+        }, () => setNotifications([]));
         return () => unsubscribe();
       }, [authUser, currentRecipientKey]);
 
@@ -2462,7 +2491,7 @@
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl text-center space-y-4 max-w-sm">
               <Lock className="w-10 h-10 text-rose-500 mx-auto" />
               <h2 className="text-white font-bold">Cuenta no asignada</h2>
-              <p className="text-xs text-slate-400">Has iniciado sesión correctamente, pero el administrador aún no ha vinculado tu correo a un perfil de mercenario.</p>
+              <p className="text-xs text-slate-400">No se ha podido confirmar un perfil activo y único vinculado a esta cuenta. Si persiste, contacta con el administrador.</p>
               <button onClick={handleLogout} className="px-4 py-2 bg-slate-800 rounded-xl text-xs font-bold">Cerrar sesión</button>
             </div>
           </div>
