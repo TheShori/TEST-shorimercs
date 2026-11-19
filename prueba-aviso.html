@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>Comprobar aviso · GestiónMercenarios TEST</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#050b1d;color:#f1f5f9}*{box-sizing:border-box}body{margin:0}header{background:#312e81;padding:14px 20px;text-align:center;font-weight:750}main{max-width:860px;margin:36px auto;padding:0 20px 40px}section{background:#111a2e;border:1px solid #334155;border-radius:18px;padding:24px;margin:20px 0}h1{font-size:clamp(24px,4vw,32px);margin:0 0 12px}h2{font-size:20px;margin:0 0 12px}p{line-height:1.6;color:#cbd5e1}label{display:block;margin:18px 0 8px;font-weight:650}input,select,button{font:inherit;border-radius:10px;padding:13px;width:100%;border:1px solid #475569}input,select{background:#050b1d;color:#f8fafc}button{background:#5143e9;color:white;font-weight:750;cursor:pointer;margin-top:18px;border-color:transparent}button:disabled{opacity:.5;cursor:default}.secondary{background:#253148}.row{display:flex;gap:16px;align-items:center;justify-content:space-between}.row button{width:auto;margin:0}#notice{white-space:pre-wrap;padding:14px;border-left:4px solid #818cf8;background:#10172c}#notice[data-kind="ok"]{border-color:#34d399;color:#6ee7b7}#notice[data-kind="error"]{border-color:#fbbf24;color:#fde68a}#message{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;font-family:inherit;background:#050b1d;padding:18px;border-radius:12px}.muted{color:#94a3b8;font-size:14px}a{color:#a5b4fc}input:focus,select:focus,button:focus{outline:2px solid #a5b4fc;outline-offset:3px}[hidden]{display:none!important}@media(max-width:520px){section{padding:18px}.row{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header>PRUEBA DE AVISO · SOLO LECTURA · SIN ENVÍOS</header>
+<main>
+<h1>Comprueba el aviso antes de enviar</h1>
+<p>El NAS comprobará tu sesión y la asignación de la misión. Esta página consulta el estado actual y muestra un borrador: no cambia la misión ni envía WhatsApp.</p>
+<p id="notice" role="status" aria-live="polite">Comprobando sesión…</p>
+<section id="loginPanel" hidden>
+<h2>Tu cuenta habitual</h2><p>Usa la misma cuenta de GestiónMercenarios.</p>
+<form id="loginForm">
+<label for="email">Correo</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Contraseña</label><input id="password" type="password" autocomplete="current-password" required>
+<button id="loginButton" type="submit">Entrar</button>
+</form>
+</section>
+<section id="sessionPanel" hidden><div class="row"><strong id="sessionName"></strong><button id="logout" class="secondary" type="button">Salir</button></div></section>
+<section id="missionPanel" hidden>
+<h2>Selecciona una misión</h2>
+<label for="mission">Misión</label><select id="mission" disabled><option value="">Cargando…</option></select>
+<label for="event">Aviso que quieres previsualizar</label><select id="event" disabled></select>
+<button id="preview" type="button" disabled>Comprobar aviso · sin enviar</button>
+<button id="reload" class="secondary" type="button">Actualizar listado</button>
+<p class="muted">Usa una misión pausada para la primera comprobación. El servidor comprueba el estado al consultar; no confirma que se haya producido un cambio nuevo.</p>
+</section>
+<section id="resultPanel" hidden>
+<h2>Previsualización comprobada</h2>
+<p id="version"></p><pre id="message"></pre>
+<p class="muted">Consulta terminada. No se ha enviado ni guardado este aviso. Una previsualización no concede permiso para un envío posterior.</p>
+</section>
+<p class="muted">Página adicional de TEST. <a href="./puente-permisos.html">Volver a la comprobación de listados</a></p>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {getFirestore,collection,query,where,limit,getDocs} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+const $=id=>document.getElementById(id);
+const ALLOWED_ORIGIN='https://theshori.github.io';
+const ALLOWED_PATH='/TEST-shorimercs/prueba-aviso.html';
+const ENDPOINT='https://najovisunas.synology.me:18443/api/events/preview';
+function note(text,kind='info'){$('notice').textContent=text;$('notice').dataset.kind=kind;}
+if(location.origin!==ALLOWED_ORIGIN||location.pathname!==ALLOWED_PATH){
+ note('Abre esta página en https://theshori.github.io/TEST-shorimercs/prueba-aviso.html','error');
+ throw new Error('Ruta de prueba no válida');
+}
+const firebaseConfig={apiKey:'AIzaSyA-MMvUt9IvYSHwcFbC0M3K9PdXtlf2gZU',authDomain:'gestionmercenarios.firebaseapp.com',projectId:'gestionmercenarios',storageBucket:'gestionmercenarios.firebasestorage.app',messagingSenderId:'534795985470',appId:'1:534795985470:web:ba5715acfbb4114806676f'};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const allowedEmails=new Set(['jhonwick@merc.com','shori@merc.com','mandalorian@merc.com','nildead@merc.com']);
+let generation=0,requestGeneration=0,current=null,missions=[],busy=false,controller=null;
+function clearResult(){requestGeneration++;controller?.abort();controller=null;busy=false;$('resultPanel').hidden=true;$('message').textContent='';$('version').textContent='';}
+function validSession(user,g){return g===generation&&current?.uid===user.uid&&auth.currentUser?.uid===user.uid;}
+function appendOption(select,value,label){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}
+function selected(){return missions.find(m=>m.id===$('mission').value);}
+function updateEvents(){
+ clearResult();$('event').replaceChildren();const m=selected();
+ if(m?.status==='En Pausa')appendOption($('event'),'mission_paused','Misión en pausa');
+ else if(m?.status==='En Progreso'){
+  appendOption($('event'),'mission_started','Inicio de misión');appendOption($('event'),'mission_resumed','Misión retomada');
+ }else if(m?.status==='Completada')appendOption($('event'),'mission_completed','Misión completada');
+ $('event').disabled=!$('event').options.length;$('preview').disabled=$('event').disabled;
+}
+async function loadMissions(user){
+ const g=++generation;clearResult();missions=[];$('mission').replaceChildren();$('event').replaceChildren();
+ $('mission').disabled=true;$('event').disabled=true;$('preview').disabled=true;$('reload').disabled=true;
+ note('Consultando tus misiones…');
+ try{
+  let q;const address=(user.email||'').trim().toLowerCase();
+  // La elección de consulta en la UI no es autorización. El NAS valida el UID real.
+  if(address==='victorsoripar@gmail.com')q=query(collection(db,'missions'),limit(301));
+  else{
+   if(!allowedEmails.has(address))throw Error('PROFILE');
+   const profiles=await getDocs(query(collection(db,'workers'),where('authUid','==',user.uid),limit(2)));
+   if(!validSession(user,g))return;
+   if(profiles.size!==1)throw Error('PROFILE');const p=profiles.docs[0],w=p.data();
+   if(w.authUid!==user.uid||(w.email||'').trim().toLowerCase()!==address||
+      ![undefined,true].includes(w.active)||![undefined,false].includes(w.disabled))throw Error('PROFILE');
+   q=query(collection(db,'missions'),where('workerId','==',p.id),limit(301));
+  }
+  const snapshot=await getDocs(q);if(!validSession(user,g))return;
+  if(snapshot.size>300)throw Error('LIMIT');
+  // Retener únicamente id, título y estado; no mostrar ni guardar credenciales.
+  missions=snapshot.docs.map(d=>{const m=d.data();return {id:d.id,title:typeof m.missionTitle==='string'?m.missionTitle:'Sin título',status:m.status};})
+    .filter(m=>/^mission-[0-9]{7,20}$/.test(m.id)&&['En Pausa','En Progreso','Completada'].includes(m.status))
+    .sort((a,b)=>(a.status==='En Pausa'?-1:1)-(b.status==='En Pausa'?-1:1)||a.title.localeCompare(b.title,'es'));
+  for(const m of missions)appendOption($('mission'),m.id,m.title+' · '+m.status);
+  if(missions.length){$('mission').value=missions[0].id;$('mission').disabled=false;updateEvents();note('Elige una misión y pulsa «Comprobar aviso · sin enviar».');}
+  else{appendOption($('mission'),'','No hay misiones compatibles');note('No hay misiones pausadas, en progreso o completadas para consultar. No cambies una misión real para esta prueba.');}
+ }catch(e){if(validSession(user,g))note(e.message==='PROFILE'?'Tu perfil no está activo o no coincide con esta cuenta.':e.message==='LIMIT'?'El listado supera el límite de esta prueba.':'No se pudo consultar el listado. Comprueba tu sesión y vuelve a intentarlo.','error');}
+ finally{if(validSession(user,g))$('reload').disabled=false;}
+}
+$('mission').addEventListener('change',updateEvents);
+$('event').addEventListener('change',()=>{clearResult();$('preview').disabled=!selected();});
+$('reload').addEventListener('click',()=>{if(current)void loadMissions(current);});
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();$('loginButton').disabled=true;const password=$('password').value;$('password').value='';
+ try{await signInWithEmailAndPassword(auth,$('email').value.trim(),password);}
+ catch{note('No se pudo iniciar sesión. Revisa la cuenta y contraseña.','error');}
+ finally{$('loginButton').disabled=false;}
+});
+$('logout').addEventListener('click',async()=>{
+ generation++;clearResult();missions=[];$('mission').replaceChildren();$('event').replaceChildren();$('missionPanel').hidden=true;
+ try{await signOut(auth);}catch{note('No se pudo cerrar sesión. Recarga la página antes de continuar.','error');}
+});
+onAuthStateChanged(auth,user=>{
+ generation++;clearResult();current=user;missions=[];$('mission').replaceChildren();$('event').replaceChildren();$('password').value='';
+ $('loginPanel').hidden=!!user;$('sessionPanel').hidden=!user;$('missionPanel').hidden=!user;
+ $('sessionName').textContent=user?.email||'';
+ if(user)void loadMissions(user);else note('Inicia sesión con tu cuenta habitual.');
+});
+$('preview').addEventListener('click',async()=>{
+ if(busy||!current||!selected())return;
+ clearResult();busy=true;const user=current,g=generation,r=requestGeneration;
+ const missionId=selected().id,eventType=$('event').value;
+ $('preview').disabled=true;note('El NAS está comprobando la sesión y la misión…');
+ const abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),20000);
+ const valid=()=>validSession(user,g)&&r===requestGeneration;
+ try{
+  const token=await user.getIdToken();if(!valid())return;if(abort.signal.aborted)throw new Error('TIMEOUT');
+  const response=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+    body:JSON.stringify({missionId,eventType}),credentials:'omit',redirect:'error',cache:'no-store',signal:abort.signal});
+  const result=await response.json();if(!valid())return;
+  if(!response.ok){
+   const errors={401:'La sesión no es válida o fue revocada. Sal y vuelve a entrar.',403:'Esta cuenta no está autorizada.',404:'El NAS no permite consultar esta misión con tu cuenta, o la misión ya no existe.',409:'El estado cambió o el evento no es compatible. Actualiza el listado.',429:'Se alcanzó el límite de consultas. Espera un minuto.',503:'El NAS no pudo comprobar la misión. Reintenta la consulta.'};
+   note('HTTP '+response.status+' · '+(errors[response.status]||'No se pudo completar la consulta.'),'error');return;
+  }
+  if(result.previewVersion!=='authz-v2'){note('El NAS todavía no devuelve la versión authz-v2. No damos la actualización por verificada.','error');return;}
+  if(result.status!=='preview_only'||result.willSend!==false||result.willWrite!==false||
+    result.missionId!==missionId||result.eventType!==eventType||typeof result.message!=='string'||result.message.length>6000){
+    note('Respuesta inesperada del NAS. Comparte el aviso de esta pantalla antes de continuar.','error');return;
+  }
+  $('version').textContent='Versión authz-v2 · Sin envío · Sin escritura';$('message').textContent=result.message;$('resultPanel').hidden=false;
+  note('PREVISUALIZACIÓN AUTORIZADA · SIN ENVÍO','ok');
+ }catch{if(valid())note('No se pudo completar la consulta al NAS. Comprueba la conexión y reintenta; esta página no realiza envíos.','error');}
+ finally{clearTimeout(timer);if(valid()){controller=null;busy=false;$('preview').disabled=!selected();}}
+});
+</script>
+</body>
+</html>
