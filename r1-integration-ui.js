@@ -5,10 +5,11 @@ const box='rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs';
 const button='rounded-lg px-3 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40';
 export function useMissionR1(authUser,enabled){
  const [url,setUrl]=useState(()=>{try{return verifyBackend(sessionStorage.getItem('gm-test-whatsapp-url')||NAS_ORIGIN);}catch{return NAS_ORIGIN;}});
- const [missions,setMissions]=useState([]),[connected,setConnected]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[result,setResult]=useState(null),[secrets,setSecrets]=useState({}),[pending,setPending]=useState(false);
+ const [missions,setMissions]=useState([]),[connected,setConnected]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[result,setResult]=useState(null),[secrets,setSecrets]=useState({}),[pending,setPending]=useState(false),[pilot,setPilot]=useState(null);
+ const pilotRef=useRef(null);
  const current=useRef(authUser),generation=useRef(0),pendingRef=useRef(null),lastRef=useRef(null),lock=useRef(false),timers=useRef(new Map());current.current=authUser;
  const clearSecrets=useCallback(()=>{for(const t of timers.current.values())clearTimeout(t);timers.current.clear();setSecrets({});},[]);
- useEffect(()=>{generation.current++;setMissions([]);setConnected(false);setError('');setResult(null);pendingRef.current=null;lastRef.current=null;setPending(false);clearSecrets();},[authUser?.uid,clearSecrets]);
+ useEffect(()=>{generation.current++;setMissions([]);setConnected(false);setError('');setResult(null);setPilot(null);pilotRef.current=null;pendingRef.current=null;lastRef.current=null;setPending(false);clearSecrets();},[authUser?.uid,clearSecrets]);
  useEffect(()=>{const hide=()=>clearSecrets();window.addEventListener('blur',hide);document.addEventListener('visibilitychange',hide);return()=>{window.removeEventListener('blur',hide);document.removeEventListener('visibilitychange',hide);for(const t of timers.current.values())clearTimeout(t);};},[clearSecrets]);
  async function send(body){
    if(!enabled||location.hostname!=='theshori.github.io'||!location.pathname.startsWith('/TEST-shorimercs/'))throw Error('Esta versión solo se habilita en GitHub TEST.');
@@ -23,7 +24,7 @@ export function useMissionR1(authUser,enabled){
    if(current.current?.uid!==u.uid||generation.current!==g)throw Error('La sesión cambió; no se muestran datos anteriores.');
    return data;
  }
- async function refresh(){try{const g=generation.current;const data=await send({action:'list'});if(data.status!=='listed'||!Array.isArray(data.missions)||data.scope!=='gm_r1_integration/test')throw Error('Formato de respuesta inesperado.');if(g!==generation.current)return;clearSecrets();setMissions(data.missions);setConnected(true);setError('');try{sessionStorage.setItem('gm-test-whatsapp-url',verifyBackend(url));}catch{};return data;}
+ async function refresh(){try{const g=generation.current;const data=await send({action:'list'});if(data.status!=='listed'||!Array.isArray(data.missions)||data.scope!=='gm_r1_integration/test')throw Error('Formato de respuesta inesperado.');if(g!==generation.current)return;clearSecrets();pilotRef.current=checkedPilotInfo(data.ownPhonePilot);setPilot(pilotRef.current);setMissions(data.missions);setConnected(true);setError('');try{sessionStorage.setItem('gm-test-whatsapp-url',verifyBackend(url));}catch{};return data;}
  catch(e){setError(e.message);setConnected(false);throw e;}}
  async function load(){if(lock.current)return;lock.current=true;setBusy(true);setResult(null);try{await refresh();}catch{}finally{setBusy(false);lock.current=false;}}
  async function execute(command){
@@ -33,27 +34,27 @@ export function useMissionR1(authUser,enabled){
    catch(e){if(g===generation.current){if(e.uncertain){pendingRef.current=command;setPending(true);}else{pendingRef.current=null;setPending(false);}setError(e.message);}throw e;}
    finally{lock.current=false;setBusy(false);}
  }
- async function mutate(action,mission,data){if(!connected)throw Error('Primero conecta el flujo R1 con el NAS.');if(mission&&!isManaged(mission))throw Error('Encargo real: solo lectura en esta versión TEST.');return execute(makeCommand(action,mission,data,crypto.randomUUID()));}
+ async function mutate(action,mission,data){if(!connected)throw Error('Primero conecta el flujo R1 con el NAS.');if(mission&&!isManaged(mission))throw Error('Encargo real: solo lectura en esta versión TEST.');return execute(withPilot(makeCommand(action,mission,data,crypto.randomUUID()),pilotRef.current));}
  async function retry(){const req=pendingRef.current||lastRef.current;if(!req)return;try{await execute(req);}catch{};}
  async function save(mission,form,list,mode){const res=await mutate(mission?'edit':'create',mission,{mission:missionData(form,list),credential:credentialData(mode,form)});return res;}
  async function reveal(m){if(!isManaged(m))throw Error('Credenciales comerciales fuera de esta integración.');if(lock.current)throw Error('Espera a la operación en curso.');lock.current=true;setBusy(true);setError('');const g=generation.current;
  try{const data=await send({action:'reveal',missionId:m.id});if(data.status!=='revealed'||!data.credential)throw Error('No se ha recuperado la credencial.');if(g!==generation.current)return;const old=timers.current.get(m.id);if(old)clearTimeout(old);setSecrets(s=>({...s,[m.id]:data.credential}));timers.current.set(m.id,setTimeout(()=>{setSecrets(s=>{const c={...s};delete c[m.id];return c;});timers.current.delete(m.id);},15000));return data.credential;}
  catch(e){setError(e.message);throw e;}finally{lock.current=false;setBusy(false);}}
  function hide(id){const t=timers.current.get(id);if(t)clearTimeout(t);timers.current.delete(id);setSecrets(s=>{const c={...s};delete c[id];return c;});}
- function changeUrl(value){if(busy||pendingRef.current)return;setUrl(value);setConnected(false);clearSecrets();setMissions([]);lastRef.current=null;setResult(null);}
- return {url,setUrl:changeUrl,missions,connected,busy,error,result,pending,hasLast:!!lastRef.current,load,retry,mutate,save,reveal,hide,secrets,clearSecrets,isManaged};
+ function changeUrl(value){if(busy||pendingRef.current)return;setUrl(value);setConnected(false);clearSecrets();setMissions([]);setPilot(null);pilotRef.current=null;lastRef.current=null;setResult(null);}
+ return {url,setUrl:changeUrl,pilot,missions,connected,busy,error,result,pending,hasLast:!!lastRef.current,load,retry,mutate,save,reveal,hide,secrets,clearSecrets,isManaged};
 }
 export function R1IntegrationBar({r1}){
  return h('section',{className:'max-w-7xl mx-auto px-4 pt-4'},h('div',{className:'rounded-xl border border-amber-500/40 bg-slate-900 p-4 space-y-2'},
  h('h2',{className:'text-sm font-extrabold text-amber-300'},'R1 · Integración en formularios · SOLO TEST'),
- h('p',{className:'text-xs text-slate-300'},'Encargos reales: solo lectura aquí. Las nuevas misiones del formulario se guardan en un espacio TEST separado, sin WhatsApp ni importes reales. Producción no se modifica.'),
+ h('p',{className:'text-xs text-slate-300'},'Encargos reales: solo lectura. Datos ficticios en TEST. El piloto explícito de TEST AVISO NAS 01 puede enviar hasta cuatro avisos al número de Victor; el panel indica si está activo.'),
  h('div',{className:'flex gap-2 flex-wrap'},h('input',{type:'url','aria-label':'Servidor R1 en el NAS',value:r1.url,disabled:r1.busy||r1.pending,onChange:e=>r1.setUrl(e.target.value),placeholder:NAS_ORIGIN,className:box+' min-w-[250px] flex-1'}),h('button',{type:'button',onClick:r1.load,disabled:r1.busy||!r1.url||r1.pending,className:button},r1.busy?'Procesando…':'Conectar / actualizar R1')),
  h('p',{className:'text-[11px] text-slate-400'},r1.connected?'Conectado al flujo de misiones TEST. Usa los formularios y tarjetas habituales.':'Conecta con el NAS usando tu sesión de Firebase. No necesitas introducir la clave de Make.'),
  r1.error?h('p',{role:'alert',className:'text-xs text-rose-300'},r1.error):null,
  (r1.pending||r1.hasLast)?h('button',{type:'button',disabled:r1.busy,onClick:r1.retry,className:button+' bg-amber-700'},r1.pending?'Repetir misma petición PENDIENTE':'Comprobar repetición de la última petición'):null,
  r1.pending?h('p',{className:'text-xs text-amber-300'},'No prepares otra operación, no cierres sesión ni esta pestaña hasta aclarar el resultado. La petición solo se conserva en memoria.'):null,
- r1.result?h('p',{className:'text-xs text-emerald-300','data-testid':'r1-last-result'},'Resultado: '+r1.result.status+' · revisión '+r1.result.revision+' · SIN WHATSAPP'):null,
- h(R1SavedNotice,{result:r1.result})));
+ r1.result?h('p',{className:'text-xs text-emerald-300','data-testid':'r1-last-result'},'Resultado: '+r1.result.status+' · revisión '+r1.result.revision+(r1.result.ownPhoneDispatch?' · PILOTO A TU NÚMERO':' · SIN WHATSAPP')):null,
+ h(R1ButtonsPilotPanel,{info:r1.pilot}),h(R1PilotDispatch,{result:r1.result}),h(R1SavedNotice,{result:r1.result})));
 }
 export function checkedNotice(result){
  if(!result||!['committed_test','duplicate'].includes(result.status)||!['status','checklist'].includes(result.action)||
@@ -85,12 +86,48 @@ export function R1SavedNotice({result}){
   return null;
  }
  return h('section',{'aria-label':'Aviso guardado en TEST','data-testid':'r1-saved-notice',className:'rounded-xl border border-emerald-500/30 bg-slate-950 p-4 space-y-3'},
-  h('h3',{className:'font-bold text-emerald-300'},'Aviso guardado en TEST · Sin envío'),
+  h('h3',{className:'font-bold text-emerald-300'},result.ownPhoneDispatch?'Aviso original guardado en TEST':'Aviso guardado en TEST · Sin envío'),
   h('p',{className:'text-xs text-slate-300'},(n.progress?'Subtarea completada · '+n.progress.done+'/'+n.progress.total+' ('+n.progress.percent+'%) · '+n.status:n.previousStatus+' → '+n.status)+' · revisión '+n.revision),
   h('pre',{className:'whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-slate-100'},n.message),
   n.duplicate?h('p',{className:'text-xs text-amber-300'},'Petición repetida: se muestra el aviso original guardado para esta revisión.'):null,
-  h('p',{className:'text-xs text-slate-400'},'Guardado con el cambio de la misión. Envío bloqueado en TEST. Se muestra el resultado de esta petición, no un historial.'));
+  h('p',{className:'text-xs text-slate-400'},result.ownPhoneDispatch?'El aviso original permanece bloqueado en TEST. El resultado de la copia de prueba a Victor aparece en el panel del piloto.':'Guardado con el cambio de la misión. Envío bloqueado en TEST. Se muestra el resultado de esta petición, no un historial.'));
 }
+
+const PILOT_VERSION='own-phone-buttons-v1',PILOT_MISSION='mission-r1-93183c8b-b900-4a34-b424-dca8421d8669';
+export function checkedPilotInfo(p){
+ if(!p||p.version!==PILOT_VERSION||p.missionId!==PILOT_MISSION||p.limit!==4||!Number.isSafeInteger(p.used)||p.used<0||p.used>4||!['active','not_armed','expired','invalid','stopped','limit','unconfirmed'].includes(p.state)||!Array.isArray(p.attempts)||p.attempts.length!==p.used||p.attempts.some(x=>!['accepted','duplicate','unconfirmed'].includes(x.state)||(x.revision!==null&&(!Number.isSafeInteger(x.revision)||x.revision<11||x.revision>20))))return null;
+ return p;
+}
+export function withPilot(command,info){
+ const p=checkedPilotInfo(info);
+ return p&&command.missionId===PILOT_MISSION&&['status','checklist'].includes(command.action)?{...command,ownPhonePilot:PILOT_VERSION}:command;
+}
+export function R1ButtonsPilotPanel({info}){
+ const p=checkedPilotInfo(info);if(!p)return null;
+ const texts={active:'PILOTO ACTIVO · WHATSAPP A TU NÚMERO',not_armed:'Piloto de botones pendiente de activar en el NAS',expired:'Piloto caducado · sin nuevos envíos',invalid:'Activación no válida · revisar antes de continuar',stopped:'Piloto desactivado · sin nuevos envíos',limit:'Piloto terminado · cuatro intentos utilizados',unconfirmed:'Piloto bloqueado · hay un resultado sin confirmar'};
+ const states={accepted:'Solicitud aceptada; comprueba el móvil',duplicate:'El bot indica duplicado',unconfirmed:'Resultado incierto; no reintentar el envío'};
+ return h('section',{'data-testid':'buttons-pilot',className:'rounded-xl border border-amber-400 bg-amber-950/40 p-4 space-y-2'},
+ h('h3',{className:'font-bold text-amber-300'},texts[p.state]),
+ h('p',{className:'text-sm'},'Solo TEST AVISO NAS 01 · número terminado en 578 · intentos '+p.used+'/4'),
+ p.state==='active'?h('p',{className:'text-xs'},'Con SHORI: pausa, reanuda, desmarca y vuelve a marcar una subtarea, y completa la misión. Desmarcar no envía. Comprueba cada WhatsApp antes del siguiente paso.'):null,
+ ...p.attempts.map((a,i)=>h('p',{key:i,className:'text-xs'},'Revisión '+(a.revision??'?')+' · '+states[a.state])),
+ p.state==='unconfirmed'?h('p',{className:'text-xs text-amber-300'},'No cambies de nuevo el estado para repetir. Comprueba el móvil y comparte este resultado.'):null);
+}
+export function checkedPilotDispatch(result){
+ const p=result?.ownPhoneDispatch;
+ if(!p||p.version!==PILOT_VERSION||p.missionId!==PILOT_MISSION||result.missionId!==PILOT_MISSION||p.receiptId!==result.receiptId||!/^[a-f0-9]{64}$/.test(p.receiptId||'')||p.revision!==result.revision||!['accepted','duplicate','unconfirmed','not_attempted','no_notice'].includes(p.state)||(p.message!==null&&(typeof p.message!=='string'||p.message.length>4000)))return null;
+ return p;
+}
+export function R1PilotDispatch({result}){
+ const p=checkedPilotDispatch(result);if(!p)return result?.ownPhoneDispatch?h('p',{role:'alert',className:'text-amber-300'},'No se pudo validar el resultado del piloto. Comprueba tu móvil antes de continuar.'):null;
+ const texts={accepted:'Solicitud de prueba aceptada por el bot · comprueba tu WhatsApp',duplicate:'El bot indica duplicado · no confirma un nuevo envío',unconfirmed:'Resultado de envío no confirmado · no habrá reintento automático',not_attempted:'Cambio guardado; no se confirmó un intento de envío',no_notice:'Cambio guardado sin aviso nuevo · sin envío'};
+ return h('section',{'data-testid':'pilot-dispatch',className:'rounded-xl border border-cyan-500/40 bg-slate-950 p-4 space-y-2'},
+ h('h3',{className:'font-bold text-cyan-300'},texts[p.state]),
+ h('p',{className:'text-xs'},'Destino fijo: número de Victor terminado en 578 · revisión '+p.revision),
+ p.message?h('pre',{className:'whitespace-pre-wrap break-words font-sans text-sm'},p.message):null,
+ result.status==='duplicate'?h('p',{className:'text-xs text-amber-300'},'Consulta de la misma petición: no se ha solicitado otro envío.'):null);
+}
+
 export function R1CredentialCard({r1,mission}){
  if(!isManaged(mission))return h('div',{className:'rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400'},'Encargo real · solo lectura en esta versión TEST. No se consultan sus credenciales desde R1.');
  const c=r1.secrets[mission.id];

@@ -40,7 +40,7 @@
 <body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
   <div id="root"></div>
   <div id="gmerc-test-warning" style="display:none;position:fixed;left:10px;bottom:10px;z-index:9999;max-width:460px;padding:10px 14px;border-radius:10px;background:#7c2d12;color:#fff;font:600 12px/1.4 system-ui;box-shadow:0 6px 18px #0009;pointer-events:none">
-    🧪 R1 TEST — Encargos reales: SOLO LECTURA. Formulario integrado: datos ficticios en espacio separado. SIN WHATSAPP.
+    🧪 R1 TEST — Encargos reales: SOLO LECTURA. Datos ficticios separados. Piloto de WhatsApp solo al número de Victor; consulta el panel R1.
   </div>
   <script>
     if (location.hostname === 'theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/')) {
@@ -65,7 +65,7 @@
     // WHATSAPP_CENTER_1D7: UI separada, sin escrituras.
     import { WhatsAppCenter } from './whatsapp-center-ui.js';
     // R1_INTEGRATION_TEST: formularios existentes; almacenamiento separado.
-    import { useMissionR1, R1IntegrationBar, R1CredentialCard } from './r1-integration-ui.js';
+    import { useMissionR1, R1IntegrationBar, R1CredentialCard } from './r1-integration-ui.js?v=buttons-v1';
 
     const firebaseConfig = {
       apiKey: "AIzaSyA-MMvUt9IvYSHwcFbC0M3K9PdXtlf2gZU",
@@ -1550,7 +1550,7 @@
       const handleToggleMissionChecklistItem = async (mission, itemId) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('checklist', mission, { itemId, done: !getMissionChecklist(mission).find(item => item.id === itemId)?.done });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('checklist', mission, { itemId, done: !getMissionChecklist(mission).find(item => item.id === itemId)?.done });  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1649,7 +1649,7 @@
             await r1.save(editingMission, missionForm, finalChecklist, r1CredentialMode);
             setMissionForm(prev=>({...prev,accountUser:'',accountPass:''}));
             setIsMissionModalOpen(false);
-            showToast('✅ Misión TEST guardada por Node.js; sin WhatsApp.');
+            showToast('✅ Misión TEST guardada por Node.js. Consulta el panel R1.');
           } catch (error) { showToast(error.message || '⚠️ No se confirma el guardado. Revisa el aviso R1 superior.'); }
           return;
         }
@@ -1743,7 +1743,7 @@
       const handleQuickWorkerReassign = async (mission, newWorkerId) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('reassign', mission, { workerId: newWorkerId });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('reassign', mission, { workerId: newWorkerId });  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1792,7 +1792,7 @@
       const handleCreatorQuickStatusChange = async (mission, newStatus) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('status', mission, { status: newStatus, completionNotes: '' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('status', mission, { status: newStatus, completionNotes: '' });  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1848,7 +1848,7 @@
       const handleQuickTogglePaymentMethod = async (mission) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('payment', mission, { paymentMethod: getMissionPaymentMethod(mission) === 'PayPal' ? 'Bizum' : 'PayPal' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('payment', mission, { paymentMethod: getMissionPaymentMethod(mission) === 'PayPal' ? 'Bizum' : 'PayPal' });  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1866,7 +1866,7 @@
       const handleStartMission = async (mission) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('status', mission, { status: 'En Progreso' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('status', mission, { status: 'En Progreso' });  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1904,7 +1904,7 @@
       const handlePauseMission = async (mission) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('status', mission, { status: 'En Pausa' });  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('status', mission, { status: 'En Pausa' });  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1944,7 +1944,7 @@
       const handlePrioritizeMission = async (mission) => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(mission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('priority', mission, {});  showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('priority', mission, {});  showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -1958,7 +1958,7 @@
         if (IS_TEST_GITHUB) {
           e.preventDefault();
           if (!r1.isManaged(completingMission)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('status', completingMission, { status: 'Completada', completionNotes: completionNoteInput.trim() }); setCompletingMission(null); setCompletionNoteInput(''); showToast('✅ Misión TEST completada y credencial retirada. Sin WhatsApp.'); }
+          try { await r1.mutate('status', completingMission, { status: 'Completada', completionNotes: completionNoteInput.trim() }); setCompletingMission(null); setCompletionNoteInput(''); showToast('✅ Misión TEST completada y credencial retirada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
@@ -2014,7 +2014,7 @@
       const handleDeleteMission = async () => {
         if (IS_TEST_GITHUB) {
           if (!r1.isManaged(missionToDelete)) { showToast('🧪 Encargo real: solo lectura en TEST.'); return; }
-          try { await r1.mutate('delete', missionToDelete, {}); setMissionToDelete(null); showToast('✅ Operación TEST confirmada; sin WhatsApp.'); }
+          try { await r1.mutate('delete', missionToDelete, {}); setMissionToDelete(null); showToast('✅ Operación TEST confirmada. Consulta el resultado en el panel R1.'); }
           catch (_) { showToast('⚠️ Revisa el resultado de R1 antes de repetir.'); }
           return;
         }
