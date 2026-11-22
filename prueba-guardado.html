@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'">
+  <title>Comprobacion del guardado — TEST</title>
+  <style>
+    body{margin:0;background:#020617;color:#e2e8f0;font:17px/1.6 system-ui,sans-serif}main{max-width:860px;margin:48px auto;padding:24px}h1{line-height:1.2}article{background:#0f172a;border:1px solid #334155;border-radius:16px;padding:24px;margin:24px 0}.badge{color:#fbbf24;font-weight:700}.ok{color:#34d399}.bad{color:#fda4af}a{color:#a5b4fc}li{margin:8px 0}#result{font-size:24px;font-weight:750}
+  </style>
+</head>
+<body><main>
+  <p class="badge">GESTIONMERCENARIOS · PRUEBA LOCAL DEL NAVEGADOR</p>
+  <h1>Comprueba la correccion del guardado</h1>
+  <p>Esta pagina utiliza exclusivamente valores ficticios. No inicia sesion, no accede a Firebase ni al NAS y no envia WhatsApp.</p>
+  <article><div id="result" role="status">Ejecutando comprobaciones…</div><p id="detail">Se comprobara el mismo modulo que importa la web actualizada.</p></article>
+  <details><summary>Ver comprobaciones</summary><ol id="checks"></ol></details>
+  <p><a href="./">Volver a la web TEST</a></p>
+  <script type="module">
+    const result=document.getElementById('result'), detail=document.getElementById('detail');
+    try {
+      const {runChecks}=await import('./pruebas-guardado.js?v=save-v1');
+      const checks=runChecks(), passed=checks.filter(c=>c.ok).length;
+      for(const c of checks){const li=document.createElement('li');li.textContent=(c.ok?'OK · ':'FALLO · ')+c.name;li.className=c.ok?'ok':'bad';document.getElementById('checks').appendChild(li);}
+      const ok=passed===checks.length && checks.length===25;
+      result.textContent=(ok?'GUARDADO CORREGIDO · ':'REVISION NECESARIA · ')+passed+'/'+checks.length;
+      result.className=ok?'ok':'bad';
+      detail.textContent=ok?'El modulo ha superado las pruebas con datos ficticios. No se ha modificado ninguna mision.':'Comparte el nombre de la comprobacion fallida. No se han utilizado datos reales.';
+    } catch {
+      result.textContent='NO SE PUDO CARGAR LA PRUEBA';result.className='bad';
+      detail.textContent='Comprueba que los cuatro archivos del paquete estan en la raiz del repositorio TEST y que GitHub Pages ha terminado de publicar.';
+    }
+  </script>
+</main></body></html>

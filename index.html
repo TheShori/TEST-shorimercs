@@ -40,7 +40,7 @@
 <body class="bg-slate-950 text-slate-100 select-none sm:select-auto">
   <div id="root"></div>
   <div id="gmerc-test-warning" style="display:none;position:fixed;left:10px;bottom:10px;z-index:9999;max-width:460px;padding:10px 14px;border-radius:10px;background:#7c2d12;color:#fff;font:600 12px/1.4 system-ui;box-shadow:0 6px 18px #0009;pointer-events:none">
-    🧪 R1 TEST · Permisos web v1 — Encargos reales: SOLO LECTURA. Datos ficticios separados. Piloto de WhatsApp solo al número de Victor; consulta el panel R1.
+    🧪 R1 TEST · Permisos web v1 · Guardado v1 — Encargos reales: SOLO LECTURA. Datos ficticios separados. Piloto de WhatsApp solo al número de Victor; consulta el panel R1.
   </div>
   <script>
     if (location.hostname === 'theshori.github.io' && location.pathname.startsWith('/TEST-shorimercs/')) {
@@ -60,8 +60,9 @@
     } from 'lucide-react';
 
     import { initializeApp } from "firebase/app";
-    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, where } from "firebase/firestore";
+    import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where } from "firebase/firestore";
     import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+    import { decryptPassword, legacyPasswordPatch } from './legacy-credentials.js?v=save-v1';
     // WHATSAPP_CENTER_1D7: UI separada, sin escrituras.
     import { WhatsAppCenter } from './whatsapp-center-ui.js';
     // R1_INTEGRATION_TEST: formularios existentes; almacenamiento separado.
@@ -250,28 +251,6 @@
 
     // AVISO: COMPATIBILIDAD CON DATOS ANTIGUOS. Base64 + clave en HTML NO es cifrado seguro.
     // No modificar aún este formato: requiere migración de credenciales desde un servidor seguro.
-    const SECRET_CRYPTO_KEY = "GestionMercenariosSecureKey2026!_";
-
-    const encryptPassword = (plainText) => {
-      if (!plainText) return '';
-      try {
-        return btoa(encodeURIComponent(plainText) + "_" + SECRET_CRYPTO_KEY);
-      } catch (e) {
-        return plainText;
-      }
-    };
-
-    const decryptPassword = (cipherText) => {
-      if (!cipherText) return '';
-      try {
-        if (!cipherText.includes("_" + SECRET_CRYPTO_KEY)) return cipherText;
-        const decoded = atob(cipherText).replace("_" + SECRET_CRYPTO_KEY, "");
-        return decodeURIComponent(decoded);
-      } catch (e) {
-        return cipherText;
-      }
-    };
-
     const getCountryInfoFromPhone = (phoneStr) => {
       if (!phoneStr) return { name: 'Desconocido', flag: '❓' };
       const clean = String(phoneStr).replace(/[^\d]/g, '');
@@ -1687,10 +1666,15 @@
         const sanitizedMetaPhone = sanitizePhoneForMeta(rawPhoneInput);
         const formattedPhone = sanitizedMetaPhone ? `+${sanitizedMetaPhone}` : rawPhoneInput;
 
+        // La contraseña solo se incluye si el administrador la cambia.
+        let passwordPatch;
+        try { passwordPatch = legacyPasswordPatch(missionForm.accountPass, editingMission); }
+        catch (error) { showToast(error.message); return; }
+        const { accountPass: ignoredPassword, ...formWithoutPassword } = missionForm;
         const targetMonthYear = editingMission ? (editingMission.monthYear || getCurrentMonthYear()) : getCurrentMonthYear();
         const payload = {
-          ...missionForm,
-          accountPass: encryptPassword(missionForm.accountPass),
+          ...formWithoutPassword,
+          ...passwordPatch,
           clientPhone: formattedPhone,
           clientPhoneMeta: sanitizedMetaPhone,
           clientContact: formattedPhone,
@@ -1707,7 +1691,14 @@
           const nextWorkerId = payload.workerId || 'unassigned';
 
           if (db) {
-            await setDoc(doc(db, "missions", editingMission.id), { ...editingMission, ...payload }, { merge: true });
+            try {
+              // No reenvia estado, temporizadores ni credenciales de la copia abierta.
+              // updateDoc falla si la mision fue borrada mientras estaba abierto el formulario.
+              await updateDoc(doc(db, "missions", editingMission.id), payload);
+            } catch {
+              showToast('⚠️ No se pudo confirmar el guardado. Actualiza el listado antes de continuar.');
+              return;
+            }
 
             if (prevWorkerId !== nextWorkerId) {
               if (prevWorkerId !== 'unassigned') {
