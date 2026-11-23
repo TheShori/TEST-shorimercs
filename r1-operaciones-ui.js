@@ -27,6 +27,10 @@ export function useMissionR1(authUser,enabled){
 }
 export function R1IntegrationBar({r1}){
  const safe=fn=>()=>Promise.resolve().then(fn).catch(()=>{});
+ if(!r1.isAdmin){
+  if(!r1.pending)return null;
+  return h('div',{role:'alert',className:'max-w-3xl mx-auto px-4 py-3 text-sm'},h('p',null,'No se ha confirmado tu último cambio.'),h('button',{className:button,disabled:r1.busy,onClick:safe(r1.retry)},'Comprobar guardado'));
+ }
  return h('section',{className:'max-w-7xl mx-auto px-4 pt-4'},h('div',{className:'rounded-xl border border-amber-500 bg-slate-900 p-4 space-y-3'},
  h('h2',{className:'text-lg font-bold text-amber-300'},r1.isAdmin?'Operaciones comerciales':'Misiones'),
  r1.isAdmin?h('p',null,'Los cambios afectan a las misiones reales. WhatsApp: '+(r1.dispatchEnabled?'activo para eventos nuevos.':'pausado; los avisos retenidos no se enviarán al activarlo.')):null,
