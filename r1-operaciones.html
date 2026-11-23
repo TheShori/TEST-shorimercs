@@ -282,7 +282,7 @@
     function linkedActiveWorker(profiles, user) {
       if (!user || !user.uid || !user.email) return null;
       const email = user.email.toLowerCase();
-      if (!['jhonwick@merc.com','shori@merc.com','mandalorian@merc.com','nildead@merc.com'].includes(email)) return null;
+      if (!['jhonwick@merc.com','shori@merc.com','mandalorian@merc.com','nildead@merc.com','fetu@merc.com'].includes(email)) return null;
       const matches = profiles.filter(w => w.authUid === user.uid);
       if (matches.length !== 1) return null;
       const w = matches[0];
