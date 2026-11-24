@@ -1,7 +1,7 @@
 // TEST only. No credentials, tokens or command bodies are persisted by this module.
 export const NAS_ORIGIN='https://najovisunas.synology.me:18443';
-export const SCOPE='gm_r1_commercial/live';
-export const VERSION='commercial-live-v1';
+export const SCOPE='gm_r1_nas_test/local';
+export const VERSION='nas-test-v11';
 export const ADMIN='victorsoripar@gmail.com';
 export const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 export const isManaged=m=>!!m&&m.r1Managed===true&&typeof m.id==='string'&&Number.isSafeInteger(m.r1Revision)&&m.r1Revision>0;
@@ -29,10 +29,10 @@ export function makeTransport({getUser,isCurrent,fetcher=fetch,locationCheck=()=
   const token=await u.getIdToken();if(!isCurrent()||getUser()?.uid!==u.uid)fail('La sesión cambió.');
   const text=JSON.stringify(body);if(new TextEncoder().encode(text).length>9000)fail('Formulario demasiado grande: reduce textos o subtareas.');
   const c=new AbortController(),timer=setTimeout(()=>c.abort(),30000);let response,data;
-  try{response=await fetcher(NAS_ORIGIN+'/api/r1/commercial-live',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:text,cache:'no-store',redirect:'error',signal:c.signal});data=await response.json();}
+  try{response=await fetcher(NAS_ORIGIN+'/api/r1/nas-test',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','X-MCOC-Mode':'nas-test-v11'},body:text,cache:'no-store',redirect:'error',signal:c.signal});data=await response.json();}
   catch{const e=Error('Resultado no confirmado. Usa «Reanudar la misma petición» sin cerrar esta pestaña.');e.uncertain=true;throw e;}finally{clearTimeout(timer);}
   if(!isCurrent()||getUser()?.uid!==u.uid)fail('La sesión cambió.');
-  if(!response.ok){const messages={DB_QUOTA:'La base de datos ha alcanzado su cuota. Se reintentará automáticamente cuando vuelva a estar disponible.',STALE_VERSION:'La misión cambió. Actualiza y revisa el formulario antes de guardar.',STALE_BATCH:'Las misiones cambiaron. Actualiza y revisa de nuevo la liquidación.',STALE_WORKER:'El perfil cambió. Actualiza antes de continuar.',UNPAID_WORKER:'Liquida primero el saldo de este perfil.',RUN_COUNT_LIMIT:'Se alcanzó el límite de misiones. No crees otro; conserva este identificador.',KEY:'El NAS no puede cargar la clave de servicio comercial.',NO_CREDENTIAL:'La credencial ya no está disponible.',RATE_LIMIT:'Espera un minuto y reanuda la misma petición.',RUN_UNAVAILABLE:'El servicio aún no está activado. Completa la migración en el NAS.',TWO_LINKED_WORKERS_REQUIRED:'Se necesitan al menos dos perfiles activos y vinculados.'};const e=Error(messages[data.code]||data.error||'Consulta rechazada: '+response.status);e.code=data.code;e.retryAfterMs=data.code==='DB_QUOTA'?900000:0;e.uncertain=response.status>=500||response.status===429;throw e;}
+  if(!response.ok){const messages={AUTH_UNAVAILABLE:'El servicio de acceso no está disponible. Se reintentará automáticamente.',LOCAL_NOT_READY:'La base de datos de TEST todavía no está instalada en el NAS.',LOCAL_UNAVAILABLE:'No se puede acceder a la base de datos de TEST en el NAS. Producción sigue usando Firebase.',DB_QUOTA:'La base de datos ha alcanzado su cuota. Se reintentará automáticamente cuando vuelva a estar disponible.',STALE_VERSION:'La misión cambió. Actualiza y revisa el formulario antes de guardar.',STALE_BATCH:'Las misiones cambiaron. Actualiza y revisa de nuevo la liquidación.',STALE_WORKER:'El perfil cambió. Actualiza antes de continuar.',UNPAID_WORKER:'Liquida primero el saldo de este perfil.',RUN_COUNT_LIMIT:'Se alcanzó el límite de misiones. No crees otro; conserva este identificador.',KEY:'El NAS no puede cargar la clave de servicio comercial.',NO_CREDENTIAL:'La credencial ya no está disponible.',RATE_LIMIT:'Espera un minuto y reanuda la misma petición.',RUN_UNAVAILABLE:'La copia de TEST en el NAS todavía no está preparada.',TWO_LINKED_WORKERS_REQUIRED:'Se necesitan al menos dos perfiles activos y vinculados.'};const e=Error(messages[data.code]||data.error||'Consulta rechazada: '+response.status);e.code=data.code;e.retryAfterMs=data.code==='DB_QUOTA'?900000:0;e.uncertain=response.status>=500||response.status===429;throw e;}
   if(typeof data.willSend!=='boolean'||data.commercialWrites!==true){const e=Error('Respuesta fuera del servicio comercial. No continúes.');e.uncertain=true;throw e;}
   return data;
  };
@@ -105,3 +105,4 @@ export function startAutoSync(client,{windowTarget=window,documentTarget=documen
  void tick();
  return ()=>{stopped=true;cancel();for(const event of ['focus','online','offline'])windowTarget.removeEventListener(event,wake);documentTarget.removeEventListener('visibilitychange',wake);};
 }
+

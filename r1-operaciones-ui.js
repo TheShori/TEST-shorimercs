@@ -1,9 +1,9 @@
 import React,{useState,useRef,useEffect,useCallback} from 'react';
-import {RehearsalClient,makeTransport,isManaged,ADMIN,UUID,startAutoSync} from './r1-operaciones-client.mjs?v=10-cuota';
+import {RehearsalClient,makeTransport,isManaged,ADMIN,UUID,startAutoSync} from './r1-operaciones-client.mjs?v=11-nas-local';
 const h=React.createElement;
 const button='rounded-lg px-3 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40';
 const EMPTY={runId:'',missions:[],workers:[],tags:[],busy:false,connected:false,pending:null,last:null,result:null,error:''};
-const STORAGE='gm-r1-operaciones-v1';
+const STORAGE='gm-r1-nas-test-v11';
 function stored(){try{const x=JSON.parse(sessionStorage.getItem(STORAGE)||'{}');return UUID.test(x.runId)?{runId:x.runId,seedRequestId:UUID.test(x.seedRequestId)?x.seedRequestId:''}:{};}catch{return {};}}
 export function useMissionR1(authUser,enabled){
  const [state,setState]=useState(EMPTY),[secrets,setSecrets]=useState({}),[error,setError]=useState('');
@@ -38,7 +38,7 @@ export function R1IntegrationBar({r1}){
 }
 export function R1DeliveryPanel({r1}){
  if(!r1.isAdmin)return null;
- const states={held:'Retenido',queued:'Pendiente',attempting:'Sin confirmación',accepted:'Aceptado por WhatsApp',unknown:'Sin confirmación; revisar',not_sent:'No enviado',expired:'Caducado',disabled:'Desactivado',invalid_phone:'Teléfono no válido'};
+ const states={simulated:'Simulado · sin envío',imported:'Histórico importado · sin reenvío',held:'Retenido',queued:'Pendiente',attempting:'Sin confirmación',accepted:'Aceptado por WhatsApp',unknown:'Sin confirmación; revisar',not_sent:'No enviado',expired:'Caducado',disabled:'Desactivado',invalid_phone:'Teléfono no válido'};
  const events={mission_started:'Inicio',mission_resumed:'Reanudación',mission_paused:'Pausa',checklist_step:'Avance',mission_completed:'Finalización'};
  return h('section',{className:'bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3'},
   h('h3',{className:'font-bold text-white'},'Últimos avisos'),
@@ -54,3 +54,4 @@ export function R1CredentialCard({r1,mission}){
   h('strong',{className:'inline-block mr-3'},'Correo y Contraseña'),
   c?h('div',{className:'space-y-2'},h('p',{className:'break-all font-mono'},c.username),h('p',{className:'break-all font-mono text-amber-200'},c.password),h('div',{className:'flex flex-wrap gap-2'},h('button',{className:button,type:'button',onClick:()=>copy(c.username)},'Copiar usuario'),h('button',{className:button,type:'button',onClick:()=>copy(c.password)},'Copiar contraseña'),h('button',{className:button,type:'button',onClick:()=>r1.hide(mission.id)},'Ocultar'))):h('button',{className:button,type:'button',disabled:r1.busy||r1.pending||!r1.connected||mission.credentialState!=='stored'||mission.status==='Completada',onClick:()=>r1.reveal(mission).catch(()=>{})},'Revelar'));
 }
+
