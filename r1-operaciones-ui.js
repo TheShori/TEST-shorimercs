@@ -38,7 +38,7 @@ export function R1IntegrationBar({r1}){
 }
 export function R1DeliveryPanel({r1}){
  if(!r1.isAdmin)return null;
- const states={simulated:'Simulado · sin envío',imported:'Histórico importado · sin reenvío',held:'Retenido',queued:'Pendiente',attempting:'Sin confirmación',accepted:'Aceptado por WhatsApp',unknown:'Sin confirmación; revisar',not_sent:'No enviado',expired:'Caducado',disabled:'Desactivado',invalid_phone:'Teléfono no válido'};
+ const states={pilot_prepared:'Prueba preparada · sin confirmación',simulated:'Simulado · sin envío',imported:'Histórico importado · sin reenvío',held:'Retenido',queued:'Pendiente',attempting:'Sin confirmación',accepted:'Aceptado por WhatsApp',unknown:'Sin confirmación; revisar',not_sent:'No enviado',expired:'Caducado',disabled:'Desactivado',invalid_phone:'Teléfono no válido'};
  const events={mission_started:'Inicio',mission_resumed:'Reanudación',mission_paused:'Pausa',checklist_step:'Avance',mission_completed:'Finalización'};
  return h('section',{className:'bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3'},
   h('h3',{className:'font-bold text-white'},'Últimos avisos'),
