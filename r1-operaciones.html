@@ -68,6 +68,7 @@
 
     // R1_INTEGRATION_TEST: formularios existentes; almacenamiento separado.
     import { useMissionR1, R1IntegrationBar, R1CredentialCard, R1DeliveryPanel } from './r1-operaciones-ui.js?v=12-nas-whatsapp';
+    import { R1ReceiptPanel } from './r1-entregas-panel.mjs?v=18';
 
     // This entry point must never fall through to the production write branches.
     if (location.origin !== 'https://theshori.github.io' || location.pathname !== '/TEST-shorimercs/r1-operaciones.html') throw Error('Solo GitHub TEST.');
@@ -2528,7 +2529,13 @@
 
                 {creatorTab === 'whatsappCenter' && IS_TEST_GITHUB ? (
 
-                  <R1DeliveryPanel r1={r1} />
+                  <div className="space-y-6">
+                    <R1ReceiptPanel authUser={authUser} />
+                    <details className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                      <summary className="cursor-pointer font-bold text-slate-300">Avisos de las misiones TEST</summary>
+                      <div className="mt-4"><R1DeliveryPanel r1={r1} /></div>
+                    </details>
+                  </div>
 
                 ) : creatorTab === 'ranking' ? (
                   <div className="space-y-6">
