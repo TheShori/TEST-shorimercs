@@ -29,3 +29,14 @@ export function calendarRows(missions,workers,today){
  return missions.map(m=>({mission:m,worker:names.get(m.workerId)||null,workerName:names.get(m.workerId)?.name||(m.workerId&&m.workerId!=='unassigned'?'Mercenario no disponible':'Sin asignar'),range:missionRange(m,today)}));
 }
 export function onDay(rows,day){return rows.filter(r=>!r.range.error&&r.range.start<=day&&r.range.end>=day).sort((a,b)=>a.mission.missionTitle.localeCompare(b.mission.missionTitle,'es'));}
+export function timelineDays(month){return monthDays(month).filter(d=>d.startsWith(month+'-'));}
+export function barSpan(range,days){
+ if(range.error||!days.length||range.end<days[0]||range.start>days.at(-1))return null;
+ const start=range.start<days[0]?days[0]:range.start,end=range.end>days.at(-1)?days.at(-1):range.end;
+ return {start:days.indexOf(start),length:days.indexOf(end)-days.indexOf(start)+1,continuesBefore:range.start<days[0],continuesAfter:range.end>days.at(-1)};
+}
+export function workerColor(value){
+ const text=String(value||'');
+ for(const [word,color] of [['rose','#fb7185'],['emerald','#34d399'],['amber','#fbbf24'],['cyan','#22d3ee'],['fuchsia','#e879f9'],['pink','#e879f9'],['blue','#60a5fa'],['orange','#fb923c']])if(text.includes(word))return color;
+ return '#818cf8';
+}
