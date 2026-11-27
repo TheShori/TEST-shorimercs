@@ -2523,7 +2523,6 @@
                   <button onClick={() => setCreatorTab('ranking')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'ranking' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏆 Top Ventas y Clientes</button>
                   <button onClick={() => setCreatorTab('tags')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'tags' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏷️ Etiquetas ({tags.length})</button>
                   <button onClick={() => setCreatorTab('finances')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'finances' ? 'bg-emerald-600 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>💶 Finanzas Mensuales</button>
-                  {IS_TEST_GITHUB && <button onClick={() => setCreatorTab('whatsappCenter')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'whatsappCenter' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>📨 Centro WhatsApp</button>}
                   <button onClick={() => setCreatorTab('workers')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap flex items-center justify-center gap-1.5 ${creatorTab === 'workers' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
                     <span>👥 Gestión de Mercs</span>
                     {totalPendingAllWorkersUSD > 0 && (
@@ -2534,17 +2533,7 @@
                   </button>
                 </div>
 
-                {creatorTab === 'whatsappCenter' && IS_TEST_GITHUB ? (
-
-                  <div className="space-y-6">
-                    <R1ReceiptPanel authUser={authUser} />
-                    <details className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                      <summary className="cursor-pointer font-bold text-slate-300">Avisos de las misiones TEST</summary>
-                      <div className="mt-4"><R1DeliveryPanel r1={r1} /></div>
-                    </details>
-                  </div>
-
-                ) : creatorTab === 'ranking' ? (
+                {creatorTab === 'ranking' ? (
                   <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4">
                       <div>
@@ -2877,6 +2866,15 @@
                         )}
                       </div>
                     </div>
+                    {isCreatorSession && IS_TEST_GITHUB && (
+<div className="space-y-6">
+                    <R1ReceiptPanel authUser={authUser} />
+                    <details className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                      <summary className="cursor-pointer font-bold text-slate-300">Avisos de las misiones TEST</summary>
+                      <div className="mt-4"><R1DeliveryPanel r1={r1} /></div>
+                    </details>
+                  </div>
+                    )}
                   </div>
                 ) : creatorTab === 'tags' ? (
                   <div className="space-y-6">
