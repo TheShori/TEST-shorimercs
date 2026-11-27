@@ -2519,7 +2519,6 @@
 
                 <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 max-w-3xl overflow-x-auto no-scrollbar">
                   <button onClick={() => setCreatorTab('missions')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'missions' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>📋 Gestión de Misiones</button>
-                  {isCreatorSession && <button onClick={() => setCreatorTab('calendar')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'calendar' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>📅 Calendario</button>}
                   <button onClick={() => setCreatorTab('ranking')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'ranking' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏆 Top Ventas y Clientes</button>
                   <button onClick={() => setCreatorTab('tags')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'tags' ? 'bg-amber-500 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>🏷️ Etiquetas ({tags.length})</button>
                   <button onClick={() => setCreatorTab('finances')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition whitespace-nowrap ${creatorTab === 'finances' ? 'bg-emerald-600 text-slate-950 font-extrabold' : 'text-slate-400 hover:text-slate-200'}`}>💶 Finanzas Mensuales</button>
@@ -2534,9 +2533,7 @@
                   </button>
                 </div>
 
-                {creatorTab === 'calendar' && isCreatorSession ? (
-                  <R1MissionCalendar authUser={authUser} missions={missions} workers={workers} />
-                ) : creatorTab === 'whatsappCenter' && IS_TEST_GITHUB ? (
+                {creatorTab === 'whatsappCenter' && IS_TEST_GITHUB ? (
 
                   <div className="space-y-6">
                     <R1ReceiptPanel authUser={authUser} />
@@ -3739,6 +3736,7 @@
                         );
                       })}
                     </div>
+                    {isCreatorSession && <R1MissionCalendar authUser={authUser} missions={missions} workers={workers} />}
                   </div>
                 ) : (
                   /* ========================================================================= */
