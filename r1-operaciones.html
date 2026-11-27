@@ -72,6 +72,7 @@
     import { R1MissionCalendar } from './r1-mission-calendar.mjs?v=21';
     import { R1WorkerRanking } from './r1-worker-ranking.mjs?v=22';
     import { R1ReceiptPanel } from './r1-entregas-panel.mjs?v=18';
+    import { R1ClientPortalAdmin } from './r1-client-portal-admin.mjs?v=24';
 
     // This entry point must never fall through to the production write branches.
     if (location.origin !== 'https://theshori.github.io' || location.pathname !== '/TEST-shorimercs/r1-operaciones.html') throw Error('Solo GitHub TEST.');
@@ -2866,6 +2867,7 @@
                         )}
                       </div>
                     </div>
+                    {isCreatorSession && IS_TEST_GITHUB && <R1ClientPortalAdmin authUser={authUser} />}
                     {isCreatorSession && IS_TEST_GITHUB && (
 <div className="space-y-6">
                     <R1ReceiptPanel authUser={authUser} />
